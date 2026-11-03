@@ -76,6 +76,29 @@ fn firmware(variable: &str, filename: &str) -> Result<PathBuf> {
         "OVMF firmware missing: set {variable} to {filename}"
     ))
 }
+/// Run prepared assets without source compilation; launcher validates their hashes.
+pub fn run_prepared(esp: &Path, headless: bool) -> Result<()> {
+    for file in ["EFI/BOOT/BOOTX64.EFI", "kernel.bin", "font.bin", "source.mira"] {
+        if !esp.join(file).is_file() {
+            return Err(format!("prepared UEFI image is missing {file}; build it first"));
+        }
+    }
+    let runtime = esp.with_extension("runtime");
+    let mut command = qemu_command(esp, &runtime)?;
+    command.args(["-serial", "mon:stdio", "-monitor", "none", "-nic", "none", "-debugcon"])
+        .arg(format!("file:{}", runtime.join("debug.log").display()));
+    if headless {
+        command.args(["-display", "none"]);
+    } else {
+        command.args(["-device", "qemu-xhci,id=mira-usb,addr=04.0", "-device", "usb-kbd,bus=mira-usb.0"]);
+    }
+    let status = command.status().map_err(|e| format!("QEMU: {e}"))?;
+    if !status.success() {
+        return Err(format!("QEMU exited: {status}"));
+    }
+    Ok(())
+}
+
 pub fn qemu_command(esp: &Path, runtime: &Path) -> Result<Command> {
     let code = firmware("MIRA_OVMF_CODE", "OVMF_CODE.4m.fd")?;
     let vars_template = firmware("MIRA_OVMF_VARS", "OVMF_VARS.4m.fd")?;
@@ -87,9 +110,11 @@ pub fn qemu_command(esp: &Path, runtime: &Path) -> Result<Command> {
     let esp = std::fs::canonicalize(esp).map_err(|e| e.to_string())?;
     // The ESP stays read-only; optional state uses a separately marked image file.
     let mut cmd = Command::new("qemu-system-x86_64");
-    cmd.args([
-        "-accel", "tcg", "-machine", "q35", "-m", "128M", "-vga", "std",
-    ])
+    // Use hardware virtualization when accessible; TCG remains the fallback.
+    if cfg!(target_os = "linux") && std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").is_ok() {
+        cmd.args(["-accel", "kvm"]);
+    }
+    cmd.args(["-accel", "tcg", "-machine", "q35", "-m", "128M", "-vga", "std"])
     .args([
         "-drive",
         &format!("if=pflash,format=raw,readonly=on,file={}", code.display()),

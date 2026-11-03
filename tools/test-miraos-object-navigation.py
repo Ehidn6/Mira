@@ -17,6 +17,7 @@ root = Path(__file__).resolve().parents[1]
 source = sys.argv[1] if len(sys.argv) > 1 else 'projects/MiraOS'
 if '--prepared' not in sys.argv:
     subprocess.run(['target/debug/mira','build-uefi',source,'target/miraos/object-navigation-test-esp'],cwd=root,check=True,timeout=180)
+image = root / os.environ.get('MIRA_TEST_ESP', 'target/miraos/object-navigation-test-esp')
 out = root / 'target/miraos/smoke'
 out.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
@@ -30,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         '-vga', 'std', '-display', 'gtk', '-name', 'MiraOS - object navigation check', '-nic', 'none', '-monitor', 'none',
         '-drive', f'if=pflash,format=raw,readonly=on,file={firmware}/OVMF_CODE.4m.fd',
         '-drive', f'if=pflash,format=raw,file={tmp}/vars.fd',
-        '-drive', f'if=none,id=esp,format=raw,readonly=on,file=fat:{root}/target/miraos/object-navigation-test-esp',
+        '-drive', f'if=none,id=esp,format=raw,readonly=on,file=fat:{image}',
         '-device', 'virtio-blk-pci,drive=esp,bootindex=1',
         '-device', 'qemu-xhci,id=xhci,addr=04.0',
         '-device', 'usb-kbd,bus=xhci.0,port=1',
@@ -188,7 +189,60 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             subprocess.run(['hyprctl', 'dispatch',
                 f'hl.dsp.focus({{window="address:{previous_focus}"}})'],
                 check=True, stdout=subprocess.DEVNULL, timeout=5)
-        original = (root / 'target/miraos/object-navigation-test-esp/source.mira').read_bytes()
+        if '--ui-only' in sys.argv:
+            initial_picture = capture('workspace-output-hidden')
+            width, height, _ = initial_picture
+            columns, rows = width // 8, height // 16
+            boundary = min(columns // 6, 32) * 8
+            lower = (rows - 6) * 16
+            border = crop(initial_picture, boundary, lower, boundary + 1, lower + 1)
+            assert border != b'\0\0\0', 'Workspace still reserves a bottom console pane'
+            type_text('MiXeD')
+            input_picture = capture('workspace-input-overlay')
+            assert crop(input_picture, width//3,64,width*2//3,320) != crop(initial_picture,width//3,64,width*2//3,320)
+            press('esc')
+            cancelled = capture('workspace-input-cancelled')
+            assert crop(cancelled,boundary,lower,boundary+1,lower+1) == border
+            # Input is submitted through the same dispatcher, not inserted in source.
+            start = len(transcript)
+            type_text('hello')
+            press('ret')
+            wait(b'input event queued', start, 8)
+            output_picture = capture('workspace-output-on-demand')
+            assert crop(output_picture,boundary,lower,boundary+1,lower+1) != border
+            press('esc')
+            hidden = capture('workspace-output-dismissed')
+            assert crop(hidden,boundary,lower,boundary+1,lower+1) == border
+            press('alt','x')
+            type_text('source open 327')
+            press('ret')
+            wait(b'SOURCE:', start, 15)
+            start = len(transcript)
+            press('ctrl','x')
+            before, before_line = report(start)
+            press('meta_l','2')
+            press('alt','x')
+            type_text('console input')
+            press('ret')
+            capture('editor-input-overlay')
+            start = len(transcript)
+            type_text(':d')
+            press('ret')
+            wait(b'source line:', start, 8)
+            found = re.search(rb'source bytes/cursor/revision/dirty/full/rejected: (\d+)/(\d+)/(\d+)/(\d+)/(\d+)/(\d+)', transcript[start:])
+            assert found and tuple(map(int,found.groups())) == before, 'Palette input changed editor context'
+            capture('editor-output-on-demand')
+            press('esc')
+            press('ctrl','n')
+            start = len(transcript)
+            press('ctrl','x')
+            after, _ = report(start)
+            assert after[0] == before[0] and after[1] > before[1] and after[2:] == before[2:], 'Editor focus/cursor was lost'
+            print('PASS: graphical USB input overlay, cancel, on-demand output/Escape, editor context and cursor')
+            qmp('quit')
+            assert process.wait(timeout=5) == 0
+            sys.exit(0)
+        original = (image / 'source.mira').read_bytes()
         initial, _ = report(console_command('d', b'source bytes/cursor'))
         assert initial == (len(original), 0, 0, 0, 0, 0), initial
 

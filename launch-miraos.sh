@@ -86,6 +86,7 @@ if [ "${1:-}" = --export ]; then
   printf '\nThe saved source could not be exported. Save the draft inside MiraOS with Ctrl+S, then try again. The state image has not been changed.\n' >>"$MIRA_LOG"
 else
   printf 'Click the QEMU window to type. :b opens the editor; Ctrl+S saves; Ctrl+X returns. Use :q and Enter to save a final checkpoint, then close the QEMU window.\n\n' >>"$MIRA_LOG"
+  notify "Запуск MiraOS. При изменении исходников сначала собирается новый образ."
   if "$MIRA_ROOT/run-miraos.sh" --screen </dev/null >>"$MIRA_LOG" 2>&1; then
     exit 0
   fi

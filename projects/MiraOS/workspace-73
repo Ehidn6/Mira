@@ -69,7 +69,9 @@ workspace @73 ()->unit =
     write(Text("Alt+X commands | Super+1 workspace | Super+2 editor | Super+3 console\n"))
     write(Text("Palette: type to search, Up/Down select, Tab complete, Enter run, Esc cancel.\n"))
     write(Text(":s status | :e memory | :p pause/resume | :r reset | :q halt | :h help\n"))
-    write(Text("Other lines become input events (up to 64 bytes). Autonomous activity is silent.\n"))
+    write(Text("Type outside the editor to open INPUT; Enter submits, Esc cancels. Up to 64 bytes.\n"))
+    write(Text("Alt+X console input opens INPUT from the editor; a leading : also selects INPUT.\n"))
+    write(Text("Output appears on demand; Esc hides it. Draft and cursor are preserved.\n"))
     write(Text(":t world on/off | :T change rules, keep learning | :D world predictions/errors\n"))
     write(Text(":k checkpoint | :j/:u source pages | :g graph | :b edit RAM | :d source | :c selected code\n"))
     write(Text(":K keyboard status | :U USB host command test. USB keyboard starts at boot.\n"))
@@ -96,12 +98,21 @@ workspace @73 ()->unit =
     write(Text("ready> "))
 
   byte @74 (code:i64)->unit =
-    if not cells.parent.editor.document().editing
+    c = cells.console()
+    if c.palette_open
+      palette(code)
+    else if not cells.parent.editor.document().editing
       s = cells.parent.neural.dynamics.state()
-      if cells.console().layout == 1 and (code >= 32 or code == 8 or code == 10 or code == 13 or code == 127)
-        cells.console().layout = 0
-        cells.console().frame_dirty = true
-      if code == 24
+      if code >= 32 and code <= 126
+        palette.toggle()
+        c.palette_input = true
+        palette(code)
+      else if code == 27
+        c.console_open = false
+        if c.layout == 2
+          c.layout = 0
+        c.frame_dirty = true
+      else if code == 24
         if code == 24
           s.input_length = 0
           s.input_overflow = false
@@ -118,17 +129,11 @@ workspace @73 ()->unit =
           put(8)
           put(32)
           put(8)
-      else if code >= 32
-        if s.input_length < 64 and not s.input_overflow
-          cells.parent.neural.events.input()[s.input_length] = code
-          s.input_length += 1
-          put(code)
-        else
-          s.input_overflow = true
 
 
   // BSP bootstrap hardware access. CF8/CFC operations must be serialized before
   // concurrent drivers/SMP are introduced. No firmware calls after ExitBootServices.
+
     finish_input @72 ()->unit =
       s = cells.parent.neural.dynamics.state()
       input = cells.parent.neural.events.input()

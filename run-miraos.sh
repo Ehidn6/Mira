@@ -23,7 +23,7 @@ if ! command -v cargo >/dev/null 2>&1 && [ -x "$HOME/.cargo/bin/cargo" ]; then
 fi
 case "${1:-}" in
   --build)
-    cargo run --quiet -p mira-lang -- build-uefi projects/MiraOS target/miraos/esp
+    python3 tools/prepare-miraos.py --rebuild
     ;;
   ''|--screen|--headless)
     printf 'MiraOS starts autonomously. Console: :s status, :e memory, :p pause, :r reset, :q halt.\n'
@@ -31,11 +31,12 @@ case "${1:-}" in
     export MIRA_STATE_DISK
     printf 'State image: %s\n' "$MIRA_STATE_DISK"
     printf 'Exit QEMU: Ctrl+A, then X. Use :q and Enter for a final checkpoint.\n'
+    python3 tools/prepare-miraos.py
     if [ "${1:-}" = --screen ]; then
       printf 'Click the QEMU screen to type through its USB keyboard. :b edits; Ctrl+S saves; Ctrl+X returns. This terminal remains a fallback.\n'
-      cargo run --quiet -p mira-lang -- run-uefi projects/MiraOS target/miraos/esp
+      target/debug/mira boot-uefi target/miraos/esp
     else
-      cargo run --quiet -p mira-lang -- run-uefi projects/MiraOS target/miraos/esp --headless
+      target/debug/mira boot-uefi target/miraos/esp --headless
     fi
     ;;
 esac

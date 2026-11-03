@@ -96,11 +96,14 @@ display @214 ()->unit =
     graph_space: i64
     graph_page: i64
     graph_selected: i64
+    console_open: bool
+    palette_input: bool
     palette_open: bool
     palette_dirty: bool
     palette_length: i64
     palette_selected: i64
     dirty: bool
+
   type ConsoleLog  @30 = [i64,512]
   state @202 ()->Console = Console.persist()
   color @204 (red:i64,green:i64,blue:i64)->i64 =
@@ -169,7 +172,7 @@ display @214 ()->unit =
 
   put @210 (code:i64)->unit =
     c = cells.parent.workspace.console()
-    if c.video and (c.layout != 1 or c.output_region > 0)
+    if c.video and (c.console_open or c.layout == 2 or c.output_region > 0)
       left = 1
       right = c.columns - 1
       top = c.console_top + 1
@@ -231,9 +234,9 @@ display @214 ()->unit =
       end = number(cells.parent.storage.state().generation,end,row,color)
       d = cells.parent.editor.document()
       if d.editing
-        end = text(Text(" | EDIT; Ctrl+S save; Ctrl+X console; Ctrl+Z undo"),end,row,color)
+        end = text(Text(" | EDIT; Ctrl+S save; Ctrl+X commands; Ctrl+Z undo"),end,row,color)
       else
-        end = text(Text(" | :b edit | :i ID select | :l layout"),end,row,color)
+        end = text(Text(" | Alt+X commands | type to input"),end,row,color)
       if d.mark_active
         end = text(Text(" | MARK"),end,row,color)
       if d.clipboard_error
@@ -248,6 +251,7 @@ display @214 ()->unit =
         text.glyph(33,c.columns - 2,row,display.color(245,96,96),0)
 
   // One bounded console transcript, reflowed when the workspace layout changes.
+
   log @218 ()->ConsoleLog = ConsoleLog.persist()
   record @219 (value:i64)->unit =
     c = cells.parent.workspace.console()

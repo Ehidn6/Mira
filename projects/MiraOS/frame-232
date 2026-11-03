@@ -11,10 +11,10 @@
           sys.store32(sys.offset(sys.addr(c.framebuffer),row * c.stride + c.inspector_start * 32),border)
         label = cells.parent.display.text(Text("SPACE / CELLS"),1,2,color)
         label = cells.parent.display.text(Text("INSPECTOR"),c.inspector_start + 1,2,color)
-      if c.layout != 1
+      if c.console_open or c.layout == 2
         for pixel in 0..c.columns * 8
           sys.store32(sys.offset(sys.addr(c.framebuffer),c.editor_bottom * 16 * c.stride + pixel * 4),border)
-        label = cells.parent.display.text(Text("CONSOLE | :h help | :l layout"),1,c.console_top,color)
+        label = cells.parent.display.text(Text("OUTPUT | Esc hide | Alt+X commands"),1,c.console_top,color)
         c.output_region = 0
         history = cells.transcript()
         for index in 0..c.log_count
@@ -40,13 +40,11 @@
       c.inspector_start = c.columns - width
       c.source_left = c.nav_end + 1
       c.source_right = c.inspector_start - 1
-      c.console_top = c.rows - 11
-      c.editor_bottom = c.console_top - 1
+      c.console_top = c.console_open ? c.rows - 11 : c.rows - 1
+      c.editor_bottom = c.console_open ? c.console_top - 1 : c.rows - 1
       if c.layout == 1
         c.source_left = 0
         c.source_right = c.columns
-        c.editor_bottom = c.rows - 1
-        c.console_top = c.rows - 1
       else if c.layout == 2
         c.source_left = 0
         c.source_right = 0

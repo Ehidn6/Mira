@@ -13,8 +13,16 @@ fn run() -> Result<(), String> {
         println!("Built Mira compiler: {procedures} procedures, {bytes} bytes; {}",directory.display());
         return Ok(());
     }
+    // Boot an already prepared image without parsing or compiling its source.
+    if args.get(1).is_some_and(|s| s == "boot-uefi") {
+        let directory = Path::new(args.get(2).ok_or("boot-uefi needs OUTPUT_DIRECTORY")?);
+        if args.len() > 4 || args.get(3).is_some_and(|s| s != "--headless") {
+            return Err("usage: mira boot-uefi OUTPUT_DIRECTORY [--headless]".into());
+        }
+        return mira_lang::uefi::run_prepared(directory, args.get(3).is_some());
+    }
     if args.len() < 3 {
-        return Err("usage: mira <inspect|check|run|fmt|build|build-compiler|build-kernel|build-uefi|run-uefi> INPUT [OUTPUT]\nbuild emits Linux x86-64 ELF; build-kernel emits a freestanding Multiboot image; run uses the sequential interpreter".into());
+        return Err("usage: mira <inspect|check|run|fmt|build|build-compiler|build-kernel|build-uefi|run-uefi|boot-uefi> INPUT [OUTPUT]\nbuild emits Linux x86-64 ELF; build-kernel emits a freestanding Multiboot image; run uses the sequential interpreter".into());
     }
     let (program, source) = mira_lang::open_source(Path::new(&args[2]))?;
     match args[1].as_str() {
@@ -54,33 +62,10 @@ fn run() -> Result<(), String> {
             std::fs::write(directory.join("source.mira"), source).map_err(|e| e.to_string())?;
             println!("built UEFI/GOP project: {}", directory.display());
             if args[1] == "run-uefi" {
-                let runtime = directory.with_extension("runtime");
-                let mut command = mira_lang::uefi::qemu_command(directory, &runtime)?;
-                command
-                    .args([
-                        "-serial",
-                        "mon:stdio",
-                        "-monitor",
-                        "none",
-                        "-nic",
-                        "none",
-                        "-debugcon",
-                    ])
-                    .arg(format!("file:{}", runtime.join("debug.log").display()));
-                if args.get(4).is_some_and(|s| s == "--headless") {
-                    command.args(["-display", "none"]);
-                } else {
-                    command.args([
-                        "-device",
-                        "qemu-xhci,id=mira-usb,addr=04.0",
-                        "-device",
-                        "usb-kbd,bus=mira-usb.0",
-                    ]);
-                }
-                let status = command.status().map_err(|e| format!("QEMU: {e}"))?;
-                if !status.success() {
-                    return Err(format!("QEMU exited: {status}"));
-                }
+                mira_lang::uefi::run_prepared(
+                    directory,
+                    args.get(4).is_some_and(|s| s == "--headless"),
+                )?;
             }
         }
         "build" | "build-kernel" => {

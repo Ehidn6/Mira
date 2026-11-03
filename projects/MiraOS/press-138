@@ -9,6 +9,13 @@
       if cells.parent.workspace.console().palette_open
         cells.parent.workspace.palette.toggle()
       cells.parent.workspace.select(usage - 30)
+    else if usage == 41 and not cells.parent.workspace.console().palette_open and cells.parent.workspace.console().console_open
+      cells.parent.workspace.console().console_open = false
+      if cells.parent.workspace.console().layout == 2
+        cells.parent.workspace.console().layout = 0
+      cells.parent.workspace.console().frame_dirty = true
+    else if usage == 41 and not cells.parent.workspace.console().palette_open and cells.parent.workspace.console().layout == 2
+      cells.parent.workspace.select(0)
     else if cells.parent.workspace.console().palette_open and (usage == 41 or usage == 81 or usage == 82 or ((mods & 17) != 0 and (mods & 204) == 0 and (usage == 17 or usage == 19)))
       cells.parent.workspace.palette(usage == 41 ? 27 : (usage == 81 or usage == 17 ? 258 : 257))
     else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and usage == 44 and (mods & 17) != 0 and (mods & 204) == 0
