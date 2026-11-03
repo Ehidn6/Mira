@@ -1,0 +1,16 @@
+// Functions can contain functions. Qualified calls follow that definition tree.
+// Actual instances and their graph connections are declared in a space.
+identities 100
+keyboard @2(x:i64)->i64 =
+  transport @3(x:i64)->i64 =
+    packet @4(x:i64)->i64 = x + 2
+    packet(x)
+  repeat @5(x:i64)->i64 = transport.packet(x) + 1
+  repeat(x)
+editor @6(x:i64)->i64 = keyboard.transport(x) + keyboard.repeat(x)
+space Main @1:
+  input @10 = 5
+  output @11 = editor()
+  nested @12 = keyboard.transport.packet()
+  input.out -> output.x @13
+  input.out -> nested.x @14

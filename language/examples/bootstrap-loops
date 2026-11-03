@@ -1,0 +1,12 @@
+accumulate(limit:i64)->i64 =
+  result = 0
+  for index in 0..limit
+    result += index
+  remaining = limit
+  while remaining > 0
+    result += remaining
+    remaining -= 1
+  result
+run()->i64 = accumulate(5)
+space Main:
+  result = run()

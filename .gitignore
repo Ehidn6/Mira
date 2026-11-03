@@ -1,0 +1,13 @@
+/target
+*.log
+.DS_Store
+__pycache__/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+*.key
+*.p12
+*.pfx

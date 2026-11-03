@@ -1,0 +1,491 @@
+compiler @258 (text:LexBytes,start:i64,length:i64,final:bool,state:LexState)->i64 =
+  // Compiler grammar component. Input is up to three packed UTF-8 bytes.
+  // Output: precedence in bits 8..15, core operator tag in bits 0..7; -1 unknown.
+  // Tags follow or,and,==,!=,<,<=,>,>=,|,^,&,<<,>>,+,-,*,/,%.
+  status = -4
+  if start >= 0 and start <= length and length <= 4096 and state_valid(state[0],state[1])
+    mode = state[0]
+    kind = state[1]
+    index = start
+    active = true
+    status = 0
+    while active and index < length
+      code = text[index]
+      next = -1
+      if index + 1 < length
+        next = text[index + 1]
+      if code < 0 or code > 255
+        status = -4
+        active = false
+      else if mode == 0
+        // Wait for lookahead at a window boundary, never guess token width.
+        if next == -1 and not final
+          active = false
+        else if whitespace(code)
+          mode = 10
+          kind = 4
+          index += 1
+        else if code == 47 and next == 47
+          mode = 11
+          kind = 5
+          index += 2
+        else if code == 34
+          mode = 7
+          kind = 2
+          index += 1
+        else if code == 96
+          mode = 9
+          kind = 3
+          index += 1
+        else if letter(code) or code == 95
+          mode = 1
+          kind = 1
+          index += 1
+        else if code == 48 and (next == 120 or next == 98)
+          mode = 2
+          kind = 1
+          index += 2
+        else if digit(code)
+          mode = 3
+          kind = 1
+          index += 1
+        else
+          width = punctuation_width(code,next)
+          if width == 0
+            status = -1
+          else
+            index += width
+            status = 1
+          active = false
+      else if mode == 1
+        if letter(code) or digit(code) or code == 95
+          index += 1
+        else
+          status = kind
+          active = false
+      else if mode == 2
+        if letter(code) or digit(code)
+          index += 1
+        else
+          status = kind
+          active = false
+      else if mode == 3 or mode == 4
+        if digit(code)
+          index += 1
+        else if mode == 3 and code == 46 and next == -1 and not final
+          active = false
+        else if mode == 3 and code == 46 and digit(next)
+          index += 1
+          mode = 4
+        else if code == 101 or code == 69
+          index += 1
+          mode = 5
+        else
+          status = kind
+          active = false
+      else if mode == 5
+        if code == 43 or code == 45
+          index += 1
+        mode = 6
+      else if mode == 6
+        if digit(code)
+          index += 1
+        else
+          status = kind
+          active = false
+      else if mode == 7
+        index += 1
+        if code == 92
+          mode = 8
+        else if code == 34
+          status = kind
+          active = false
+      else if mode == 8
+        index += 1
+        mode = 7
+      else if mode == 9
+        index += 1
+        if code == 96
+          status = kind
+          active = false
+      else if mode == 10
+        if whitespace(code)
+          index += 1
+        else
+          status = kind
+          active = false
+      else if mode == 11
+        if code == 10 or code == 13
+          status = kind
+          active = false
+        else
+          index += 1
+    if status == 0 and final and index == length
+      if mode == 7 or mode == 8
+        status = -2
+      else if mode == 9
+        status = -3
+      else if mode == 0
+        status = 6
+      else
+        status = kind
+    if status != 0
+      mode = 0
+      kind = 0
+    state[0] = mode
+    state[1] = kind
+    state[2] = index
+  status
+
+
+  operator_descriptor @250 (word:i64,length:i64)->i64 =
+    result = -1
+    // or
+    if length == 2 and word == 29295
+      result = 1 * 256 + 0
+    // and
+    if length == 3 and word == 6581857
+      result = 2 * 256 + 1
+    // ==
+    if length == 2 and word == 15677
+      result = 3 * 256 + 2
+    // !=
+    if length == 2 and word == 15649
+      result = 3 * 256 + 3
+    // <
+    if length == 1 and word == 60
+      result = 3 * 256 + 4
+    // <=
+    if length == 2 and word == 15676
+      result = 3 * 256 + 5
+    // >
+    if length == 1 and word == 62
+      result = 3 * 256 + 6
+    // >=
+    if length == 2 and word == 15678
+      result = 3 * 256 + 7
+    // |
+    if length == 1 and word == 124
+      result = 4 * 256 + 8
+    // ^
+    if length == 1 and word == 94
+      result = 5 * 256 + 9
+    // &
+    if length == 1 and word == 38
+      result = 6 * 256 + 10
+    // <<
+    if length == 2 and word == 15420
+      result = 7 * 256 + 11
+    // >>
+    if length == 2 and word == 15934
+      result = 7 * 256 + 12
+    // +
+    if length == 1 and word == 43
+      result = 8 * 256 + 13
+    // -
+    if length == 1 and word == 45
+      result = 8 * 256 + 14
+    // *
+    if length == 1 and word == 42
+      result = 9 * 256 + 15
+    // /
+    if length == 1 and word == 47
+      result = 9 * 256 + 16
+    // %
+    if length == 1 and word == 37
+      result = 9 * 256 + 17
+    result
+  
+  // Prefix tags: neg=0, plus=1, bit-not=2, logical-not=3.
+  // Binding power 10 preserves the existing grammar (including `not`).
+  unary_descriptor @251 (word:i64,length:i64)->i64 =
+    result = -1
+    if length == 1 and word == 45
+      result = 10 * 256 + 0
+    if length == 1 and word == 43
+      result = 10 * 256 + 1
+    if length == 1 and word == 126
+      result = 10 * 256 + 2
+    if length == 3 and word == 7630702
+      result = 10 * 256 + 3
+    result
+  
+  // Longest punctuation token. Quotes, comments, names and numbers are scanned
+  // before this function. A missing second byte is represented by -1.
+  punctuation_width @252 (first:i64,second:i64)->i64 =
+    width = 0
+    if first == 40 or first == 41 or first == 91 or first == 93 or first == 64 or first == 61 or first == 46 or first == 44 or first == 58 or first == 43 or first == 45 or first == 42 or first == 47 or first == 37 or first == 60 or first == 62 or first == 63 or first == 38 or first == 124 or first == 94 or first == 126
+      width = 1
+    // << >> -> ..
+    if (first == 60 and second == 60) or (first == 62 and second == 62) or (first == 45 and second == 62) or (first == 46 and second == 46)
+      width = 2
+    // += -= *= /= %= == != <= >=
+    if second == 61 and (first == 43 or first == 45 or first == 42 or first == 47 or first == 37 or first == 61 or first == 33 or first == 60 or first == 62)
+      width = 2
+    width
+  
+  // Assignment tags: set=0, add=1, sub=2, mul=3, div=4, rem=5.
+  assignment_descriptor @253 (word:i64,length:i64)->i64 =
+    result = -1
+    if length == 1 and word == 61
+      result = 0
+    if length == 2 and word >> 8 == 61
+      binary = operator_descriptor(word & 255,1)
+      if binary >= 0
+        tag = binary & 255
+        if tag >= 13 and tag <= 17
+          result = tag - 12
+    result
+  
+  // Streaming token scanner. A source window contains at most 4096 byte values.
+  // State: [mode, token-kind, next-index]. Reset mode/kind to zero for a new token.
+  // A completed token resets them automatically. Index is local to this window.
+  // Result: 0 refill at next-index; 1 word/number/punctuation; 2 text;
+  // 3 quoted name; 4 whitespace; 5 comment; 6 EOF;
+  // -1 unsupported character; -2 unclosed text; -3 unclosed name; -4 bad input.
+  // Refill preserves the unconsumed suffix (occasionally one lookahead byte).
+  type LexBytes @31  = [i64,4096]
+  type LexState @32  = [i64,3]
+  
+  digit @254 (code:i64)->bool = code >= 48 and code <= 57
+  letter @255 (code:i64)->bool = (code >= 65 and code <= 90) or (code >= 97 and code <= 122)
+  whitespace @256 (code:i64)->bool = code == 9 or code == 10 or code == 12 or code == 13 or code == 32
+  
+  state_valid @257 (mode:i64,kind:i64)->bool =
+    (mode == 0 and kind == 0) or (mode >= 1 and mode <= 6 and kind == 1) or ((mode == 7 or mode == 8) and kind == 2) or (mode == 9 and kind == 3) or (mode == 10 and kind == 4) or (mode == 11 and kind == 5)
+  
+  
+  // Source integer decoder used by the bootstrap frontend. No host parser calls.
+  // Decimal, 0x hexadecimal, 0b binary; sign is supplied by the grammar.
+  // Result status: 0 success, 1 syntax/length, 2 outside i64 range.
+  type LiteralBytes @299  = [i64,128]
+  type LiteralValue @300  = [i64,1]
+  
+  literal_digit @301 (code:i64)->i64 =
+    value = -1
+    if code >= 48 and code <= 57
+      value = code - 48
+    if code >= 65 and code <= 70
+      value = code - 65 + 10
+    if code >= 97 and code <= 102
+      value = code - 97 + 10
+    value
+  
+  parse_integer @302 (text:LiteralBytes,length:i64,negative:bool,result:LiteralValue)->i64 =
+    status = 1
+    if length > 0 and length <= 128
+      base = 10
+      start = 0
+      if length >= 2 and text[0] == 48
+        if text[1] == 120
+          base = 16
+          start = 2
+        if text[1] == 98
+          base = 2
+          start = 2
+      if start < length
+        status = 0
+        value = 0
+        limit = negative ? -9223372036854775808 : -9223372036854775807
+        quotient = limit / base
+        for index in start..length
+          if status == 0
+            current = literal_digit(text[index])
+            if current < 0 or current >= base
+              status = 1
+            else
+              if value < quotient
+                status = 2
+              else
+                multiplied = value * base
+                if multiplied < limit + current
+                  status = 2
+                else
+                  value = multiplied - current
+        if status == 0
+          result[0] = negative ? value : -value
+    status
+  
+  // Decimal metadata (identities and dimensions) uses the entire u64 word.
+  // The result buffer contains its bit pattern; arithmetic overflow is explicit.
+  parse_natural @303 (text:LiteralBytes,length:i64,result:LiteralValue)->i64 =
+    status = 1
+    if length > 0 and length <= 128
+      status = 0
+      value = 0
+      quotient = 1844674407370955161
+      for index in 0..length
+        if status == 0
+          current = literal_digit(text[index])
+          if current < 0 or current >= 10
+            status = 1
+          else
+            if sys.addr(value) > sys.addr(quotient) or (value == quotient and current > 5)
+              status = 2
+            else
+              value = math.wrapping_add(math.wrapping_mul(value,10),current)
+      if status == 0
+        result[0] = value
+    status
+  
+  
+  // Bootstrap compiler component. RAX is the left word, RCX the right word.
+  // Packed result: little-endian bytes in bits 0..31, length in bits 32..39.
+  // Target operations: add/sub/mul/and/or/xor/shl/shr/rol/ror/bswap = 0..10.
+  // Unknown operation returns -1. Checked arithmetic remains the caller's policy.
+  type FloatInteger @387 = [i64,64]
+  float_scale @388 (value:FloatInteger,multiplier:i64,addend:i64)->i64 =
+    carry = addend
+    for index in 0..64
+      part = value[index] * multiplier + carry
+      value[index] = part & 65535
+      carry = part >> 16
+    carry
+
+  float_order @389 (left:FloatInteger,right:FloatInteger)->i64 =
+    result = 0
+    for step in 0..64
+      index = 63 - step
+      if result == 0 and left[index] != right[index]
+        result = left[index] < right[index] ? -1 : 1
+    result
+
+  float_shift @390 (value:FloatInteger,bits:i64)->i64 =
+    overflow = 0
+    words = bits / 16
+    if words >= 64 or bits < 0
+      overflow = 1
+    else
+      for step in 0..64
+        index = 63 - step
+        if index >= 64 - words and value[index] != 0
+          overflow = 1
+        value[index] = index >= words ? value[index - words] : 0
+      overflow = float_scale(value,1 << (bits % 16),0) | overflow
+    overflow
+
+  float_subtract @391 (left:FloatInteger,right:FloatInteger)->unit =
+    borrow = 0
+    for index in 0..64
+      part = left[index] - right[index] - borrow
+      borrow = part < 0 ? 1 : 0
+      left[index] = part & 65535
+    ()
+
+  float_size @392 (value:FloatInteger)->i64 =
+    result = 0
+    for index in 0..64
+      part = value[index]
+      if part != 0
+        width = 0
+        while part != 0
+          width += 1
+          part = part >> 1
+        result = index * 16 + width
+    result
+
+  parse_float @393 (text:LiteralBytes,length:i64,result:LiteralValue)->i64 =
+    status = 1
+    if length > 0 and length <= 128
+      numerator = FloatInteger()
+      denominator = FloatInteger()
+      denominator[0] = 1
+      digits = 0
+      significant = 0
+      fractional = 0
+      point = false
+      cursor = 0
+      status = 0
+      while cursor < length and text[cursor] != 101 and text[cursor] != 69 and status == 0
+        code = text[cursor]
+        if code == 46 and not point
+          point = true
+        else
+          if code < 48 or code > 57
+            status = 1
+          else
+            digits += 1
+            if point
+              fractional += 1
+            if significant > 0 or code != 48
+              significant += 1
+            carry = float_scale(numerator,10,code - 48)
+            if carry != 0
+              status = 2
+        cursor += 1
+      exponent = 0
+      if cursor < length and status == 0
+        cursor += 1
+        negative = false
+        if cursor < length and (text[cursor] == 43 or text[cursor] == 45)
+          negative = text[cursor] == 45
+          cursor += 1
+        first = cursor
+        while cursor < length and status == 0
+          code = text[cursor]
+          if code < 48 or code > 57
+            status = 1
+          else if exponent < 10000
+            exponent = exponent * 10 + code - 48
+          cursor += 1
+        if cursor == first
+          status = 1
+        if negative
+          exponent = -exponent
+      if digits == 0
+        status = 1
+      if status == 0
+        scale = exponent - fractional
+        order = significant + scale - 1
+        bits = 0
+        if significant > 0 and order > 38
+          status = 2
+        if significant > 0 and order >= -46 and status == 0
+          if scale >= 0
+            for step in 0..scale
+              carry = float_scale(numerator,10,0)
+              if carry != 0
+                status = 2
+          else
+            for step in 0..-scale
+              carry = float_scale(denominator,10,0)
+              if carry != 0
+                status = 2
+          power = float_size(numerator) - float_size(denominator)
+          carry = power >= 0 ? float_shift(denominator,power) : float_shift(numerator,-power)
+          if carry != 0
+            status = 2
+          if float_order(numerator,denominator) < 0
+            carry = float_scale(numerator,2,0)
+            power -= 1
+          if power == -150
+            bits = float_order(numerator,denominator) > 0 ? 1 : 0
+          else if power >= -149
+            normal = power >= -126
+            precision = normal ? 23 : power + 149
+            mantissa = 1
+            float_subtract(numerator,denominator)
+            for step in 0..precision
+              carry = float_scale(numerator,2,0)
+              mantissa *= 2
+              if float_order(numerator,denominator) >= 0
+                float_subtract(numerator,denominator)
+                mantissa += 1
+            carry = float_scale(numerator,2,0)
+            comparison = float_order(numerator,denominator)
+            if comparison > 0 or (comparison == 0 and (mantissa & 1) != 0)
+              mantissa += 1
+            if normal
+              if mantissa == 16777216
+                mantissa /= 2
+                power += 1
+              if power > 127
+                status = 2
+              else
+                bits = ((power + 127) << 23) | (mantissa - 8388608)
+            else
+              bits = mantissa
+        if status == 0
+          result[0] = bits
+    status
+

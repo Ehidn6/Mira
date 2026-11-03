@@ -1,0 +1,12 @@
+// Definitions and types remain nested; calls obey the lexical owner.
+run @1()->i64 =
+  counter = Counter(2)
+  recur(4,counter)
+  struct Counter @2:
+    value: i64
+  recur @3(count:i64,counter:Counter)->i64 =
+    if count == 0
+      counter.value
+    else
+      counter.value += 1
+      recur(count - 1,counter)

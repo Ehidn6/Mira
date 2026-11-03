@@ -1,0 +1,10 @@
+sum()->i64 =
+  value = 0
+  for outer in 0..4
+    for inner in 0..outer
+      value += outer * 10 + inner
+  for tail in 0..2
+    value += tail
+  value
+space Main:
+  result = sum()

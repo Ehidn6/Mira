@@ -1,0 +1,12 @@
+type Values = [i64,3]
+work()->i64 =
+  small = Values.aligned(64)
+  page = Values.aligned(4096)
+  ok = true
+  ok = ok and small[0] == 0 and small[2] == 0 and page[1] == 0
+  small[0] = 7
+  page[2] = 11
+  ok and small[0] + page[2] == 18 ? 1 : 0
+run()->i64 = sys.read_only(work,8192)
+space Main:
+  result = run()

@@ -1,0 +1,13 @@
+struct Counter:
+  count: i64
+type Values = [i64,2]
+next(counter:Counter)->i64 =
+  counter.count += 1
+  counter.count - 1
+run()->i64 =
+  counter = Counter()
+  values = Values(10,20)
+  values[next(counter)] += next(counter)
+  values[0] * 100 + counter.count
+space Main:
+  result = run()

@@ -1,0 +1,98 @@
+  discover @398 ()->unit =
+    s = cells.dynamics.state()
+    action = (s.world_steps / 5) % 4
+    context = Context()
+    prediction = Signal()
+    if s.world_steps % 5 != 0
+      best = -2.0
+      for candidate in 0..4
+        features(context,candidate)
+        cells.readout(cells.topology.head(),context,prediction)
+        if prediction[0] > best
+          best = prediction[0]
+          action = candidate
+    features(context,action)
+    cells.readout(cells.topology.head(),context,prediction)
+    s.world_action = action
+    s.world_prediction = prediction[0]
+    previous = s.world_actual
+    // Deterministic environment. The learner only receives the resulting signal.
+    actual = 0.1
+    if action == 0
+      s.world_hidden = 1 - s.world_hidden
+      actual = 0.2
+    else if action == 1
+      high = s.world_hidden == s.world_rule
+      actual = high ? 0.8 : 0.2
+    else if action == 2
+      s.world_delay = s.world_rule == 0 ? 2 : 3
+    if s.world_delay > 0
+      s.world_delay -= 1
+      if s.world_delay == 0
+        actual = 0.9
+    s.world_actual = actual
+    error = (prediction[0] - actual) * (prediction[0] - actual)
+    s.world_error = error
+    s.world_steps += 1
+    s.world_phase_steps += 1
+    s.world_mean += (error - s.world_mean) / math.to_f32(s.world_phase_steps)
+    if s.world_phase_steps <= 16
+      s.world_first += (error - s.world_first) / math.to_f32(s.world_phase_steps)
+    s.world_recent = s.world_phase_steps == 1 ? error : s.world_recent + (error - s.world_recent) * 0.125
+    signal = Signal(actual,math.to_f32(action) / 3.0,previous,1.0)
+    remember(signal,2,s.world_rule * 4 + action,0,0)
+    // remember retains the normal episode format, including the pre-result context.
+    for index in 0..32
+      cells.memory.memory()[s.current_row * 37 + index] = context[index]
+
+    features @399 (context:Context,action:i64)->unit =
+      for index in 0..32
+        context[index] = cells.dynamics.activity()[index]
+      context[0] = 1.0
+      for candidate in 0..4
+        context[candidate + 1] = candidate == action ? 1.0 : 0.0
+      context[5] = cells.dynamics.state().world_actual
+      context[6] = math.to_f32(cells.dynamics.state().world_steps % 16) / 15.0
+      context[31] = 1.0
+
+    control @400 (change:bool)->unit =
+      s = cells.dynamics.state()
+      if change
+        s.world_rule = 1 - s.world_rule
+        s.world_phase_steps = 0
+        s.world_mean = 0.0
+        s.world_first = 0.0
+        s.world_recent = 0.0
+        cells.parent.workspace.write(Text("world rules changed; weights and experience retained\n"))
+      else
+        s.world_enabled = not s.world_enabled
+        cells.parent.workspace.write(Text("world experiment toggled; :D shows predictions and errors\n"))
+      report()
+
+    report @401 ()->unit =
+      s = cells.dynamics.state()
+      cells.parent.workspace.write(Text("world enabled/rule/steps/phase-steps/action: "))
+      cells.parent.workspace.number(s.world_enabled ? 1 : 0)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.number(s.world_rule)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.number(s.world_steps)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.number(s.world_phase_steps)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.number(s.world_action)
+      cells.parent.workspace.write(Text("\nprediction/observed/error: "))
+      cells.parent.workspace.fixed(s.world_prediction)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.fixed(s.world_actual)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.fixed(s.world_error)
+      cells.parent.workspace.write(Text("\nerror first16/recent-EWMA/phase-mean: "))
+      cells.parent.workspace.fixed(s.world_first)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.fixed(s.world_recent)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.fixed(s.world_mean)
+      cells.parent.workspace.write(Text("\nactions: 0 toggle, 1 read, 2 pulse, 3 wait; every fifth step explores\n"))
+      cells.parent.workspace.write(Text("origin2 episodes share neural memory; phase change is not proof of transfer\n"))
+

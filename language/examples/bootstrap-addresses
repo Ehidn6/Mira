@@ -1,0 +1,10 @@
+// Address arithmetic is checked; wrapping integer operations are explicit.
+run @1()->i64 =
+  high = sys.addr(-1)
+  lower = sys.offset(high,-1)
+  wrapped = math.wrapping_add(9223372036854775807,1)
+  product = math.wrapping_mul(-9223372036854775808,2)
+  if lower > sys.addr(0) and lower < high and wrapped == -9223372036854775808 and product == 0
+    29
+  else
+    0

@@ -1,0 +1,245 @@
+workspace @73 ()->unit =
+  if cells.console().serial
+    if cells.parent.editor.document().editing
+      // Drain a bounded burst before repainting; typed code is not a neural event.
+      for index in 0..64
+        if cells.parent.editor.document().editing and (sys.in8(1021) & 1) != 0
+          cells.parent.editor(sys.in8(1016))
+    else if (sys.in8(1021) & 1) != 0
+      byte(sys.in8(1016))
+
+
+  put @47 (value:i64)->unit =
+    if cells.console().output_region == 0
+      cells.parent.display.record(value)
+    if cells.console().serial and cells.console().output_region == 0
+      spins = 0
+      while spins < 100000 and (sys.in8(1021) & 32) == 0
+        spins += 1
+        sys.pause()
+      if (sys.in8(1021) & 32) != 0
+        sys.out8(1016,value)
+    cells.parent.display.put(value)
+
+  write @48 (text:Text)->unit =
+    for index in 0..96
+      if text[index] != 0
+        put(text[index])
+
+  init @49 ()->unit =
+    old = sys.in8(1023)
+    sys.out8(1023,90)
+    first = sys.in8(1023) == 90
+    sys.out8(1023,165)
+    cells.console().serial = first and sys.in8(1023) == 165
+    sys.out8(1023,old)
+    sys.out8(1017,0)
+    sys.out8(1019,128)
+    sys.out8(1016,1)
+    sys.out8(1017,0)
+    sys.out8(1019,3)
+    sys.out8(1018,199)
+    sys.out8(1020,11)
+
+  number @50 (value:i64)->unit =
+    if value >= 10
+      number(value / 10)
+    put(48 + value % 10)
+
+  fixed @51 (value:f32)->unit =
+    absolute = value < 0.0 ? -value : value
+    if value < 0.0
+      put(45)
+    scaled = absolute * 1000.0
+    low = 0
+    high = 1000000
+    while low < high
+      middle = low + (high - low + 1) / 2
+      if math.to_f32(middle) <= scaled
+        low = middle
+      else
+        high = middle - 1
+    number(low / 1000)
+    put(46)
+    put(48 + low / 100 % 10)
+    put(48 + low / 10 % 10)
+    put(48 + low % 10)
+
+  show_help @66 ()->unit =
+    write(Text("Alt+X commands | Super+1 workspace | Super+2 editor | Super+3 console\n"))
+    write(Text("Palette: type to search, Up/Down select, Tab complete, Enter run, Esc cancel.\n"))
+    write(Text(":s status | :e memory | :p pause/resume | :r reset | :q halt | :h help\n"))
+    write(Text("Other lines become input events (up to 64 bytes). Autonomous activity is silent.\n"))
+    write(Text(":t world on/off | :T change rules, keep learning | :D world predictions/errors\n"))
+    write(Text(":k checkpoint | :j/:u source pages | :g graph | :b edit RAM | :d source | :c selected code\n"))
+    write(Text(":K keyboard status | :U USB host command test. USB keyboard starts at boot.\n"))
+    write(Text(":a hardware: PCI, physical memory and read-only controller capabilities.\n"))
+    write(Text(":l cycles layouts. Super+1/2/3 selects workspace/editor/console.\n"))
+    write(Text("Editor Ctrl+A/E line start/end; Ctrl+B/F char; Ctrl+P/N line; Alt+B/F word.\n"))
+    write(Text("Ctrl+V page down; Alt+V page up; Alt+Shift+, start; Alt+Shift+. end of document.\n"))
+    write(Text("Hold navigation to repeat. Save, palette, cut/paste and global commands do not repeat.\n"))
+    write(Text("Ctrl+K kill to EOL/newline; Alt+Backspace/D delete word; Ctrl+U digits repeat; Ctrl+G cancel.\n"))
+    write(Text("Ctrl+S save; Ctrl+Z undo; Ctrl+X exit; Ctrl+Space mark; Alt+W copy; Ctrl+W cut; Ctrl+Y paste.\n"))
+    write(Text("Alt+X source open NAME/ID; source parent/project/children navigate.\n"))
+    write(Text(":O ID open source object; :P parent; :F whole project; :C children; :c selected cell code.\n"))
+    write(Text(":v lexical check | :f go to error; editor Ctrl+R checks source.\n"))
+    write(Text(":w saves source (up to 512 KiB). :q refuses unsaved edits; :Q discards and halts.\n"))
+
+  show_boot @70 ()->unit =
+    write(Text("MiraOS native neural prototype: BSP / cooperative\ngraph cells: "))
+    number(reflect.cell_count(reflect.inner(reflect.self())))
+    put(10)
+    show_help()
+    cells.parent.neural.show_status()
+    cells.parent.storage.show_storage()
+    cells.parent.source_storage.storage_report()
+    write(Text("ready> "))
+
+  byte @74 (code:i64)->unit =
+    if not cells.parent.editor.document().editing
+      s = cells.parent.neural.dynamics.state()
+      if cells.console().layout == 1 and (code >= 32 or code == 8 or code == 10 or code == 13 or code == 127)
+        cells.console().layout = 0
+        cells.console().frame_dirty = true
+      if code == 24
+        if code == 24
+          s.input_length = 0
+          s.input_overflow = false
+        cells.parent.editor(code)
+      else if code == 10 or code == 13
+        if s.input_length > 0 or s.input_overflow
+          put(10)
+          finish_input()
+          if cells.parent.editor.document().editing
+            cells.parent.editor.document().skip_lf = code == 13
+      else if code == 8 or code == 127
+        if s.input_length > 0 and not s.input_overflow
+          s.input_length -= 1
+          put(8)
+          put(32)
+          put(8)
+      else if code >= 32
+        if s.input_length < 64 and not s.input_overflow
+          cells.parent.neural.events.input()[s.input_length] = code
+          s.input_length += 1
+          put(code)
+        else
+          s.input_overflow = true
+
+
+  // BSP bootstrap hardware access. CF8/CFC operations must be serialized before
+  // concurrent drivers/SMP are introduced. No firmware calls after ExitBootServices.
+    finish_input @72 ()->unit =
+      s = cells.parent.neural.dynamics.state()
+      input = cells.parent.neural.events.input()
+      if s.input_overflow
+        s.dropped += 1
+        write(Text("input exceeds 64-byte frame; discarded\n"))
+      else if s.input_length > 0
+        if input[0] == 58
+          if s.input_length == 2 and input[1] == 115
+            cells.parent.neural.show_status()
+            cells.parent.storage.show_storage()
+          else if s.input_length == 2 and input[1] == 101
+            cells.parent.neural.show_memory()
+          else if s.input_length == 2 and input[1] == 116
+            cells.parent.neural.discover.control(false)
+          else if s.input_length == 2 and input[1] == 84
+            cells.parent.neural.discover.control(true)
+          else if s.input_length == 2 and input[1] == 68
+            cells.parent.neural.discover.report()
+          else if s.input_length == 2 and input[1] == 112
+            s.paused = not s.paused
+            write(Text("autonomy pause changed\n"))
+          else if s.input_length == 2 and input[1] == 114
+            cells.parent.neural.reset()
+          else if s.input_length == 2 and input[1] == 106
+            cells.parent.editor.command.down()
+          else if s.input_length == 2 and input[1] == 117
+            cells.parent.editor.command.up()
+          else if s.input_length == 2 and input[1] == 75
+            cells.parent.keyboard.report()
+          else if s.input_length == 2 and input[1] == 85
+            cells.parent.usb.host().requested = true
+          else if s.input_length == 2 and input[1] == 97
+            cells.parent.hardware.state().requested = true
+          else if s.input_length == 2 and input[1] == 108
+            frame.layout()
+          else if s.input_length == 2 and input[1] == 103
+            browse.show_graph()
+          else if s.input_length == 2 and input[1] == 111
+            browse.outer()
+          else if s.input_length == 2 and input[1] == 110
+            browse.page(1)
+          else if s.input_length == 2 and input[1] == 109
+            browse.page(-1)
+          else if s.input_length > 2 and input[1] == 105
+            browse(browse.argument())
+          else if s.input_length > 2 and input[1] == 122
+            browse.enter(browse.argument())
+          else if s.input_length == 2 and input[1] == 98
+            cells.parent.editor.open()
+          else if s.input_length == 2 and input[1] == 99
+            cells.parent.source_analysis.selected_code()
+          else if s.input_length > 2 and input[1] == 79
+            opened = cells.parent.editor.parts(browse.argument())
+          else if s.input_length == 2 and input[1] == 80
+            opened = cells.parent.editor.parts.parent()
+          else if s.input_length == 2 and input[1] == 70
+            opened = cells.parent.editor.parts(reflect.root())
+          else if s.input_length == 2 and input[1] == 67
+            cells.parent.editor.parts.children()
+          else if s.input_length == 2 and input[1] == 100
+            cells.parent.editor.report()
+          else if s.input_length == 2 and input[1] == 118
+            cells.parent.editor.document().check_requested = true
+          else if s.input_length == 2 and input[1] == 102
+            cells.parent.source_analysis.error_focus()
+          else if s.input_length == 2 and input[1] == 119
+            cells.parent.editor.document().save_requested = true
+          else if s.input_length == 2 and input[1] == 107
+            cells.parent.storage.state().requested = true
+            cells.parent.storage.state().report = true
+          else if s.input_length == 2 and input[1] == 113 and cells.parent.editor.document().dirty
+            write(Text("Unsaved source draft: :q refused. :Q discards source edits and halts.\n"))
+          else if s.input_length == 2 and (input[1] == 113 or input[1] == 81)
+            cells.parent.storage.state().requested = true
+            cells.parent.storage.state().halt = true
+          else
+            show_help()
+        else if s.event_count < 16
+          slot = s.event_tail
+          for index in 0..s.input_length
+            cells.parent.neural.events.event_bytes()[slot * 64 + index] = input[index]
+          s.next_event += 1
+          cells.parent.neural.events.event_meta()[slot * 2] = s.input_length
+          cells.parent.neural.events.event_meta()[slot * 2 + 1] = s.next_event
+          s.event_tail = (slot + 1) % 16
+          s.event_count += 1
+          write(Text("input event queued\n"))
+        else
+          s.dropped += 1
+          write(Text("input queue full; event discarded\n"))
+      s.input_length = 0
+      s.input_overflow = false
+      cells.console().dirty = true
+      if not cells.parent.editor.document().editing
+        write(Text("ready> "))
+
+  query @203 ()->Text = Text.persist()
+
+  select @221 (layout:i64)->unit =
+    if layout >= 0 and layout <= 2
+      cells.console().layout = layout
+      cells.console().frame_dirty = true
+      if layout == 1
+        cells.parent.editor.open()
+      else if layout == 2
+        cells.parent.editor.document().editing = false
+      cells.parent.editor.document().redraw = true
+
+      workspace @281 = workspace():
+        space workspace @282:
+          console @120 = display.state()
+          transcript @122 = display.log()
+          query @126 = workspace.query()

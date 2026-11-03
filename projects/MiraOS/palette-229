@@ -1,0 +1,168 @@
+  palette @229 (value:i64)->unit =
+    c = cells.console()
+    if value == 27
+      toggle()
+    else if value == 10 or value == 13
+      choice = palette.choice()
+      if choice >= 0
+        toggle()
+        execute(choice)
+    else if value == 257 or value == 258
+      count = palette.count()
+      if count > 0
+        c.palette_selected = (c.palette_selected + count + (value == 257 ? -1 : 1)) % count
+    else if value == 9
+      choice = palette.choice()
+      if choice >= 0
+        name = palette.name(choice)
+        c.palette_length = 0
+        for index in 0..96
+          cells.query()[index] = name[index]
+          if name[index] != 0
+            c.palette_length += 1
+        c.palette_selected = 0
+    else if value == 8 or value == 127
+      if c.palette_length > 0
+        c.palette_length -= 1
+        cells.query()[c.palette_length] = 0
+      c.palette_selected = 0
+    else if value >= 32 and value <= 126 and c.palette_length < 64
+      cells.query()[c.palette_length] = value >= 65 and value <= 90 ? value + 32 : value
+      c.palette_length += 1
+      cells.query()[c.palette_length] = 0
+      c.palette_selected = 0
+    c.palette_dirty = true
+
+    name @222 (index:i64)->Text = index == 0 ? Text("layout workspace") : index == 1 ? Text("layout editor") : index == 2 ? Text("layout console") : index == 3 ? Text("source edit") : index == 4 ? Text("source save") : index == 5 ? Text("source check") : index == 6 ? Text("source error") : index == 7 ? Text("system status") : index == 8 ? Text("neural memory") : index == 9 ? Text("graph show") : index == 10 ? Text("graph outer") : index == 11 ? Text("graph next") : index == 12 ? Text("graph previous") : index == 13 ? Text("help") : index == 14 ? Text("source info") : index == 15 ? Text("keyboard status") : index == 16 ? Text("source selected") : index == 17 ? Text("source parent") : index == 18 ? Text("source project") : index == 19 ? Text("source children") : index == 20 ? Text("world toggle") : index == 21 ? Text("world change rules") : index == 22 ? Text("world report") : index >= 23 ? cells.parent.editor.parts.label(index - 23) : Text("")
+
+    description @223 (index:i64)->Text = index == 0 ? Text("Source, graph and console together") : index == 1 ? Text("Focus source editor; keep draft and cursor") : index == 2 ? Text("Focus console; keep source draft") : index == 3 ? Text("Edit current source draft") : index == 4 ? Text("Save draft to state disk; no compilation") : index == 5 ? Text("Check tokens and delimiters; not full typing") : index == 6 ? Text("Jump to the current source error") : index == 7 ? Text("Show neural and storage status") : index == 8 ? Text("Show saved experience") : index == 9 ? Text("Inspect current running Space") : index == 10 ? Text("Navigate to enclosing Space") : index == 11 or index == 12 ? Text("Change graph page") : index == 13 ? Text("Show keyboard and console help") : index == 14 ? Text("Show draft cursor and save status") : index == 15 ? Text("Show USB keyboard connection") : index == 16 ? Text("Open selected cell definition in this draft") : index == 17 ? Text("Open enclosing source object; preserve draft") : index == 18 ? Text("Open complete project for repair or overview") : index == 19 ? Text("List contained source objects") : index == 20 ? Text("Toggle the shared neural discovery experiment") : index == 21 ? Text("Change environment rules; keep weights and experience") : index == 22 ? Text("Show pre-observation predictions and errors") : index >= 23 ? Text("Open this source object; edits stay in the same saved project") : Text("Run existing console action")
+
+    match @224 (index:i64)->bool =
+      c = cells.console()
+      matched = 0
+      if index < 20
+        name = palette.name(index)
+        for position in 0..96
+          if matched < c.palette_length and name[position] != 0 and name[position] == cells.query()[matched]
+            matched += 1
+      else
+        // Search directly over source bytes; never allocate a Text per indexed object.
+        identity = cells.parent.editor.parts.get(index - 23,0)
+        for position in 0..12
+          packed = position < 8 ? 0x6f20656372756f73 : 0x206e6570
+          code = (packed >> ((position % 8) * 8)) & 255
+          if matched < c.palette_length and code == cells.query()[matched]
+            matched += 1
+        divisor = 1
+        while identity / divisor >= 10
+          divisor *= 10
+        while divisor > 0
+          code = 48 + identity / divisor % 10
+          if matched < c.palette_length and code == cells.query()[matched]
+            matched += 1
+          divisor /= 10
+        if matched < c.palette_length and cells.query()[matched] == 32
+          matched += 1
+        start = cells.parent.editor.parts.get(index - 23,5)
+        end = cells.parent.editor.parts.get(index - 23,6)
+        for position in start..end
+          code = cells.parent.editor.byte(position)
+          if code >= 65 and code <= 90
+            code += 32
+          if matched < c.palette_length and code == cells.query()[matched]
+            matched += 1
+      matched == c.palette_length
+    count @225 ()->i64 =
+      count = 0
+      for index in 0..23 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
+        if match(index)
+          count += 1
+      count
+
+    choice @226 ()->i64 =
+      chosen = -1
+      row = 0
+      for index in 0..23 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
+        if match(index)
+          if row == cells.console().palette_selected
+            chosen = index
+          row += 1
+      chosen
+
+    toggle @227 ()->unit =
+      c = cells.console()
+      c.palette_open = not c.palette_open
+      c.palette_dirty = true
+      if c.palette_open
+        c.palette_length = 0
+        c.palette_selected = 0
+        for index in 0..96
+          cells.query()[index] = 0
+      else
+        c.frame_dirty = true
+
+    execute @228 (index:i64)->unit =
+      if index >= 0 and index < 23 + cells.parent.editor.document().part_count
+        if index < 3
+          select(index)
+        else if index == 17
+          opened = cells.parent.editor.parts.parent()
+        else if index == 18
+          opened = cells.parent.editor.parts(reflect.root())
+        else if index == 19
+          cells.parent.editor.parts.children()
+        else if index == 20
+          cells.parent.neural.discover.control(false)
+        else if index == 21
+          cells.parent.neural.discover.control(true)
+        else if index == 22
+          cells.parent.neural.discover.report()
+        else if index >= 23
+          opened = cells.parent.editor.parts(cells.parent.editor.parts.get(index - 23,0))
+        else
+          // Preserve any half-written console line while using its existing dispatcher.
+          state = cells.parent.neural.dynamics.state()
+          saved = Text("")
+          length = state.input_length
+          overflow = state.input_overflow
+          for position in 0..64
+            saved[position] = cells.parent.neural.events.input()[position]
+          keys = Text("bwvfsegonmhdKc")
+          state.input_length = 2
+          state.input_overflow = false
+          cells.parent.neural.events.input()[0] = 58
+          cells.parent.neural.events.input()[1] = keys[index - 3]
+          byte.finish_input()
+          for position in 0..64
+            cells.parent.neural.events.input()[position] = saved[position]
+          state.input_length = length
+          state.input_overflow = overflow
+
+    draw @230 ()->unit =
+      c = cells.console()
+      if c.video
+        left = c.columns > 78 ? (c.columns - 76) / 2 : 1
+        top = 4
+        width = c.columns > 78 ? 76 : c.columns - 2
+        white = cells.parent.display.color(225,235,230)
+        accent = cells.parent.display.color(101,203,214)
+        for row in top..top + 17
+          for column in left..left + width
+            cells.parent.display.text.glyph(32,column,row,white,cells.parent.display.color(25,40,42))
+        end = cells.parent.display.text(Text("COMMANDS | Alt+X / Esc close | Tab complete"),left + 1,top,accent)
+        end = cells.parent.display.text(cells.query(),left + 1,top + 2,white)
+        first = (c.palette_selected / 5) * 5
+        row = 0
+        for index in 0..23 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
+          if match(index)
+            if row >= first and row < first + 5
+              line = top + 4 + (row - first) * 2
+              cells.parent.display.text.glyph(row == c.palette_selected ? 62 : 32,left + 1,line,accent,0)
+              end = cells.parent.display.text(name(index),left + 3,line,white)
+              end = cells.parent.display.text(description(index),left + 3,line + 1,accent)
+            row += 1
+        if row == 0
+          end = cells.parent.display.text(Text("No matching commands"),left + 1,top + 4,white)
+        end = cells.parent.display.text(Text("Ctrl+P/N or Up/Down select | Enter execute"),left + 1,top + 15,accent)
+      c.palette_dirty = false
+

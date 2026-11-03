@@ -1,0 +1,19 @@
+// The Mira compiler parses, checks, emits and links this source itself.
+type Features @1 = [f32,3]
+struct Accumulator @2:
+  value: f32
+  active: bool
+scale @3(value:f32,gain:f32)->f32 = value * gain
+run @4()->i64 =
+  weights = Features(0.5,-1.0,2.0)
+  state = Accumulator(0.0,true)
+  for index in 0..weights.len
+    state.value += scale(weights[index],math.to_f32(index + 1))
+  weights[0] *= 2.0
+  state.value /= 1.5
+  inferred = state.value - 0.5
+  inferred += 0.5
+  if state.active and inferred == 3.0 and weights[0] == 1.0 and math.sqrt(4.0) == 2.0 and math.from_bits(1065353216) == 1.0 and math.bits(-0.0) == 2147483648 and math.bits(1e-45) == 1
+    37
+  else
+    0

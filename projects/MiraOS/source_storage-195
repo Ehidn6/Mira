@@ -1,0 +1,163 @@
+source_storage @195 ()->unit =
+  d = cells.parent.editor.document()
+  if d.save_requested
+    d.save_requested = false
+    d.saved = save()
+    cells.parent.workspace.console().dirty = true
+    d.redraw = true
+    sys.scratch(notice,2048)
+
+
+  type SourceStaging  @27 = [i64,65536]
+  hash @190 (address:i64,length:i64)->i64 =
+    value = 0x14650fb0739d0383
+    for index in 0..length
+      value = math.wrapping_mul(value ^ sys.load8(sys.offset(sys.addr(address),index)),1099511628211)
+    value
+
+  load @192 ()->unit =
+    d = cells.parent.editor.document()
+    if cells.parent.storage.state().bound and d.staging > 0
+      first = bank_read(1283)
+      second = bank_read(2308)
+      bank = second > first ? 2308 : 1283
+      generation = second > first ? second : first
+      if generation > 0 and bank_read(bank) == generation
+        header = cells.parent.storage.sector()
+        sys.memory_copy(sys.addr(d.address),sys.addr(d.staging),header[2])
+        d.length = header[2]
+        d.cursor = header[5]
+        d.revision = header[6]
+        d.base0 = header[7]
+        d.base1 = header[8]
+        d.base2 = header[9]
+        d.base3 = header[10]
+        d.generation = generation
+        d.bank = bank
+        d.restored = true
+        d.lines = 1
+        d.ascii = true
+        for index in 0..d.length
+          byte = cells.parent.editor.byte(index)
+          if byte == 10
+            d.lines += 1
+          if byte >= 128 or (byte < 32 and byte != 10)
+            d.ascii = false
+        d.scope_id = reflect.root()
+        d.scope_parent = 0
+        d.scope_start = 0
+        d.scope_end = d.length
+        d.scope_lines = d.lines
+        d.part_revision = -1
+        d.redraw = true
+
+    bank_read @191 (bank:i64)->i64 =
+      d = cells.parent.editor.document()
+      generation = 0
+      ok = false
+      if d.staging > 0 and (bank == 1283 or bank == 2308)
+        ok = cells.parent.storage.disk_start.disk_request(0,bank)
+      if ok
+        header = cells.parent.storage.sector()
+        cells.parent.storage.sector_copy(header,false)
+        blank = true
+        for index in 0..64
+          blank = blank and header[index] == 0
+        if not blank
+          if header[0] != 0x334352534152494d or header[1] != 3
+            d.blocked = true
+          else if header[11] == cells.parent.storage.sector_hash(header,11)
+            valid = header[1] == 3 and header[2] >= 0 and header[2] <= SourceStaging.size_bytes() and header[2] <= d.capacity
+            valid = valid and header[3] > 0 and header[5] >= 0 and header[5] <= header[2] and header[6] >= 0 and header[6] < 0x4000000000000000
+            if not valid
+              d.blocked = true
+            else
+              size = header[2]
+              expected = header[4]
+              candidate = header[3]
+              sectors = (size + 511) / 512
+              for sector in 0..sectors
+                if ok
+                  ok = cells.parent.storage.disk_start.disk_request(0,bank + 1 + sector)
+                  if ok
+                    sys.memory_copy(sys.offset(sys.addr(d.staging),sector * 512),sys.offset(sys.addr(cells.parent.storage.state().dma),12304),512)
+              if ok and hash(d.staging,size) == expected
+                generation = candidate
+      generation
+
+  save @193 ()->bool =
+    d = cells.parent.editor.document()
+    saved = false
+    if cells.parent.storage.state().bound and d.staging > 0 and not d.blocked and d.length <= SourceStaging.size_bytes() and d.generation < 9223372036854775807
+      bank = d.bank == 1283 ? 2308 : 1283
+      digest = hash(d.address,d.length)
+      header = cells.parent.storage.sector()
+      for index in 0..64
+        header[index] = 0
+      cells.parent.storage.sector_copy(header,true)
+      ok = cells.parent.storage.disk_start.disk_request(1,bank)
+      if ok
+        ok = cells.parent.storage.disk_start.disk_request(4,0)
+      sectors = (d.length + 511) / 512
+      for sector in 0..sectors
+        if ok
+          data = sys.offset(sys.addr(cells.parent.storage.state().dma),12304)
+          sys.memory_fill(data,0,512)
+          count = d.length - sector * 512
+          if count > 512
+            count = 512
+          sys.memory_copy(data,sys.offset(sys.addr(d.address),sector * 512),count)
+          ok = cells.parent.storage.disk_start.disk_request(1,bank + 1 + sector)
+      if ok
+        ok = cells.parent.storage.disk_start.disk_request(4,0)
+      if ok
+        header[0] = 0x334352534152494d
+        header[1] = 3
+        header[2] = d.length
+        header[3] = d.generation + 1
+        header[4] = digest
+        header[5] = d.cursor
+        header[6] = d.revision
+        header[7] = d.base0
+        header[8] = d.base1
+        header[9] = d.base2
+        header[10] = d.base3
+        header[11] = cells.parent.storage.sector_hash(header,11)
+        cells.parent.storage.sector_copy(header,true)
+        ok = cells.parent.storage.disk_start.disk_request(1,bank)
+      if ok
+        ok = cells.parent.storage.disk_start.disk_request(4,0)
+      if ok
+        d.generation += 1
+        d.bank = bank
+        d.dirty = false
+        // Undo is now relative to this saved version.
+        d.history_count = 0
+        d.history_dropped = false
+        saved = true
+    saved
+
+  notice @194 ()->unit =
+    if cells.parent.editor.document().saved
+      cells.parent.workspace.write(Text("source draft saved; running code unchanged\n"))
+    else
+      cells.parent.workspace.write(Text("source save failed: need writable state disk and at most 512 KiB; RAM retained\n"))
+    if not cells.parent.editor.document().editing
+      cells.parent.workspace.write(Text("ready> "))
+
+  storage_report @196 ()->unit =
+    d = cells.parent.editor.document()
+    cells.parent.workspace.write(Text("source storage generation/restored/blocked/different-base: "))
+    cells.parent.workspace.number(d.generation)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(d.restored ? 1 : 0)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(d.blocked ? 1 : 0)
+    cells.parent.workspace.put(47)
+    different = d.base0 != reflect.revision_word(0) or d.base1 != reflect.revision_word(1) or d.base2 != reflect.revision_word(2) or d.base3 != reflect.revision_word(3)
+    cells.parent.workspace.number(different ? 1 : 0)
+    cells.parent.workspace.put(10)
+
+  // This invokes the same Mira scanner as the bootstrap compiler. It does not
+  // parse grammar or prove types. Scratch is recycled after each explicit check.
+      source_storage @285 = source_storage()

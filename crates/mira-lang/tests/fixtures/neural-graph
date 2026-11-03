@@ -1,0 +1,118 @@
+// Graph computation and its learning rule are ordinary Mira code.
+// The clean MiraOS project is separate from this executable learning program.
+type Nodes = tensor[f32,3,2]
+type Messages = tensor[f32,2,2]
+type Weights = tensor[f32,2,2]
+type EdgeFeatures = tensor[f32,2,1]
+type Indices = [i64,2]
+type Flag = [i64,1]
+struct Synapses:
+  sources: Nodes
+  targets: Nodes
+  source_indices: Indices
+  target_indices: Indices
+  features: EdgeFeatures
+weights()->Weights = Weights.persist()
+nodes()->Nodes = Nodes.persist()
+features()->EdgeFeatures = EdgeFeatures.persist()
+indices()->Indices = Indices.persist()
+flag()->Flag = Flag.persist()
+initialize()->unit =
+  initialized = cells.initialized()
+  if initialized[0] == 0
+    w = cells.weights()
+    w[0] = 1.0
+    w[3] = 1.0
+    input = cells.input()
+    input[0] = 1.0
+    input[3] = 2.0
+    source = cells.sources()
+    source[0] = 0
+    source[1] = 1
+    target = cells.targets()
+    target[0] = 2
+    target[1] = 2
+    edge = cells.features()
+    edge[0] = 1.0
+    edge[1] = 0.5
+    initialized[0] = 1
+infer()->unit =
+  input = cells.input()
+  output = cells.output()
+  links = Synapses(input,output,cells.sources(),cells.targets(),cells.features())
+  messages = Messages()
+  transformed = Messages()
+  relation.messages_into(messages,links)
+  tensor.matmul_into(transformed,messages,cells.weights())
+  for edge in 0..2
+    for feature in 0..2
+      transformed[edge * 2 + feature] *= links.features[edge]
+  relation.aggregate_into(output,links,transformed)
+  memory = cells.memory()
+  for i in 0..6
+    output[i] += memory[i] * 0.25
+train()->unit =
+  input = cells.input()
+  output = cells.output()
+  w = cells.weights()
+  source = cells.sources()
+  target = cells.targets()
+  edge_features = cells.features()
+  // A shared linear message transform; the update is explicitly programmed.
+  for from in 0..2
+    for to in 0..2
+      gradient = 0.0
+      for edge in 0..2
+        error = 2.0 - output[target[edge] * 2 + to]
+        gradient += input[source[edge] * 2 + from] * edge_features[edge] * error
+      w[from * 2 + to] += 0.1 * gradient
+remember()->unit =
+  memory = cells.memory()
+  output = cells.output()
+  for i in 0..6
+    memory[i] = memory[i] * 0.5 + output[i] * 0.5
+checkpoint()->unit =
+  tensor.copy_into(cells.saved_weights(),cells.weights())
+  tensor.copy_into(cells.saved_memory(),cells.memory())
+restore()->unit =
+  tensor.copy_into(cells.weights(),cells.saved_weights())
+  tensor.copy_into(cells.memory(),cells.saved_memory())
+loss()->f32 =
+  output = cells.output()
+  sum = 0.0
+  for feature in 0..2
+    error = 2.0 - output[4 + feature]
+    sum += error * error
+  sum
+cycle()->f32 =
+  ok = sys.neural_try(initialize,20000,4096)
+  ok = sys.neural_try(infer,20000,4096) and ok
+  before = loss()
+  ok = sys.neural_try(checkpoint,20000,4096) and ok
+  ok = sys.neural_try(train,20000,4096) and ok
+  ok = sys.neural_try(infer,20000,4096) and ok
+  after = loss()
+  ok = sys.neural_try(restore,20000,4096) and ok
+  ok = sys.neural_try(infer,20000,4096) and ok
+  restored = loss()
+  ok = sys.neural_try(train,20000,4096) and ok
+  ok = sys.neural_try(infer,20000,4096) and ok
+  repeated = loss()
+  ok = sys.neural_try(remember,20000,4096) and ok
+  if ok and after < before and restored == before and repeated == after
+    after
+  else
+    -1.0
+space NeuralGraph:
+  kernel @100 = cycle():
+    space internal @101:
+      initialized @102 = flag()
+      weights @103 = weights()
+      memory @104 = nodes()
+      output @105 = nodes()
+      input @106 = nodes()
+      sources @107 = indices()
+      targets @108 = indices()
+      features @109 = features()
+      saved_weights @110 = weights()
+      saved_memory @111 = nodes()

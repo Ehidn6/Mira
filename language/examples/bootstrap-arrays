@@ -1,0 +1,17 @@
+type Values @1 = [i64,3]
+type Flags @2 = [bool,2]
+bump @4(values:Values,index:i64)->i64 =
+  values[index] += 1
+  values[index]
+fill @5(values:Values)->unit =
+  for index in 0..values.len
+    values[index] = index * 10
+run @3()->i64 =
+  values = Values()
+  const flags = Flags(true,false)
+  fill(values)
+  values[bump(values,0)] += bump(values,0)
+  values[0] += bump(values,0)
+  if flags[0] and not flags[1]
+    values[1] += 1
+  values[0] * 10 + values[1] + values[2]

@@ -1,0 +1,154 @@
+hardware @88 ()->unit =
+  if cells.state().requested
+    cells.state().requested = false
+    probe()
+    sys.scratch(report,4096)
+
+// xHCI host bootstrap on Mira. Polled commands/events, one outstanding command.
+// DMA memory remains pinned even after an error; no stale device pointer is freed.
+
+  struct Hardware @18 :
+    map: i64
+    descriptor_size: i64
+    descriptors: i64
+    pool_base: i64
+    pool_next: i64
+    pool_end: i64
+    physical_bits: i64
+    devices: i64
+    xhci_count: i64
+    nvme_count: i64
+    network_count: i64
+    xhci: i64
+    nvme: i64
+    virtio: i64
+    requested: bool
+    xhci_bar: i64
+    xhci_version: i64
+    xhci_slots: i64
+    xhci_ports: i64
+    nvme_bar: i64
+    nvme_version: i64
+    mapped_pages: i64
+  state @75 ()->Hardware = Hardware.persist()
+
+  init @79 ()->unit =
+    h = cells.state()
+    info = sys.boot_info()
+    if sys.load64(info) == 0x4f464e494152494d and sys.load64(sys.offset(info,8)) == 1 and sys.load64(sys.offset(info,16)) >= 256 and (sys.load64(sys.offset(info,24)) & 2) != 0 and sys.load64(sys.offset(info,240)) == 1
+      map = sys.load64(sys.offset(info,112))
+      bytes = sys.load64(sys.offset(info,120))
+      stride = sys.load64(sys.offset(info,128))
+      valid = map > 0 and map < 0x100000000 and bytes > 0 and bytes <= 262144
+      valid = valid and map <= 0x100000000 - bytes and stride >= 40 and stride <= 4096
+      if valid
+        valid = bytes % stride == 0 and bytes / stride <= 4096
+      if valid
+        h.map = map
+        h.descriptor_size = stride
+        h.descriptors = bytes / stride
+        best = 0
+        for index in 0..h.descriptors
+          descriptor = sys.offset(sys.addr(map),index * stride)
+          kind = sys.load32(descriptor)
+          start = sys.load64(sys.offset(descriptor,8))
+          pages = sys.load64(sys.offset(descriptor,24))
+          attributes = sys.load64(sys.offset(descriptor,32))
+          if kind == 7 and start >= 1048576 and start < 0x100000000 and start % 4096 == 0 and pages > 0 and (attributes & 8) != 0 and attributes >= 0
+            available = (0x100000000 - start) / 4096
+            if pages < available
+              available = pages
+            if available > best
+              best = available
+              h.pool_base = start
+        if best > 0
+          // A pinned pool for early DMA and page tables; no general free/reclaim yet.
+          pages = best < 4096 ? best : 4096
+          h.pool_next = h.pool_base
+          h.pool_end = h.pool_base + pages * 4096
+        h.physical_bits = 36
+        if sys.cpuid_eax(0x80000000,0) >= 0x80000008
+          bits = sys.cpuid_eax(0x80000008,0) & 255
+          if bits >= 32 and bits <= 52
+            h.physical_bits = bits
+    scan()
+
+  physical_allocate @80 (pages:i64,alignment:i64)->i64 =
+    h = cells.state()
+    result = 0
+    if h.pool_next > 0 and pages > 0 and pages <= 4096 and alignment >= 4096 and alignment <= 2097152 and (alignment & (alignment - 1)) == 0
+      start = (h.pool_next + alignment - 1) & ~(alignment - 1)
+      bytes = pages * 4096
+      if start <= h.pool_end and bytes <= h.pool_end - start
+        sys.memory_fill(sys.addr(start),0,bytes)
+        h.pool_next = start + bytes
+        result = start
+    result
+
+  probe @85 ()->unit =
+    h = cells.state()
+    h.xhci_bar = 0
+    h.xhci_version = 0
+    h.xhci_slots = 0
+    h.xhci_ports = 0
+    h.nvme_bar = 0
+    h.nvme_version = 0
+    if h.xhci >= 0 and (init.scan.pci_config(h.xhci,4) & 2) != 0
+      base = init.scan.pci_bar0(h.xhci)
+      if base > 0 and mmio_map(base,4096)
+        address = sys.addr(base)
+        header = sys.load32(address)
+        length = header & 255
+        version = (header >> 16) & 65535
+        params = sys.load32(sys.offset(address,4))
+        if length >= 32 and length < 256 and version >= 0x90 and version < 0x200 and (params & 255) > 0 and (params >> 24) > 0
+          h.xhci_bar = base
+          h.xhci_version = version
+          h.xhci_slots = params & 255
+          h.xhci_ports = params >> 24
+    if h.nvme >= 0 and (init.scan.pci_config(h.nvme,4) & 2) != 0
+      base = init.scan.pci_bar0(h.nvme)
+      if base > 0 and mmio_map(base,4096)
+        version = sys.load32(sys.offset(sys.addr(base),8))
+        if version > 0 and version != 0xffffffff
+          h.nvme_bar = base
+          h.nvme_version = version
+
+  hex @86 (value:i64,digits:i64)->unit =
+    for index in 0..digits
+      digit = (value >> ((digits - index - 1) * 4)) & 15
+      cells.parent.workspace.put(digit < 10 ? 48 + digit : 87 + digit)
+
+  report @87 ()->unit =
+    h = cells.state()
+    cells.parent.workspace.write(Text("Hardware: PCI devices/xHCI/NVMe/network: "))
+    cells.parent.workspace.number(h.devices)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.xhci_count)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.nvme_count)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.network_count)
+    cells.parent.workspace.write(Text("\nPinned physical pool base/used/end: "))
+    hex(h.pool_base,12)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.pool_next - h.pool_base)
+    cells.parent.workspace.put(47)
+    hex(h.pool_end,12)
+    cells.parent.workspace.write(Text("\nxHCI BAR/version/slots/ports: "))
+    hex(h.xhci_bar,12)
+    cells.parent.workspace.put(47)
+    hex(h.xhci_version,4)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.xhci_slots)
+    cells.parent.workspace.put(47)
+    cells.parent.workspace.number(h.xhci_ports)
+    cells.parent.workspace.write(Text("\nNVMe BAR/version: "))
+    hex(h.nvme_bar,12)
+    cells.parent.workspace.put(47)
+    hex(h.nvme_version,8)
+    cells.parent.workspace.write(Text("\nRead-only capabilities; USB input and NVMe I/O drivers are not implemented.\nready> "))
+
+      hardware @269 = hardware():
+        space hardware @270:
+          state @123 = hardware.state()

@@ -1,0 +1,15 @@
+// Locals, const, compound assignment and branches use the shared Mira compiler.
+adjust(value:i64,enabled:bool)->i64 =
+  const step:i64 = 2
+  result = value
+  if enabled
+    result += step
+  else if value < 0
+    result = -result
+  else
+    scratch = value * 3
+    result = scratch
+  result
+run()->i64 = adjust(5,true) + adjust(-3,false) + adjust(4,false)
+space Main:
+  result = run()

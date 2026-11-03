@@ -1,0 +1,44 @@
+// Fixed-capacity structural changes use the same typed relation and buffers.
+type PNodes @121 = tensor[f32,3,1]
+type PTargets @122 = tensor[f32,2,1]
+type PIndices @123 = [i64,4]
+type PMask @124 = [bool,4]
+type PFeatures @125 = tensor[f32,4,1]
+struct PLinks @126:
+  active: PMask
+  target_indices: PIndices
+  sources: PNodes
+  features: PFeatures
+  source_indices: PIndices
+  targets: PTargets
+add @132(links:PLinks,from:i64,to:i64)->i64 = relation.add_edge(links,from,to)
+remove @133(links:PLinks,edge:i64)->bool = relation.remove_edge(links,edge)
+neighbors @134(output:PIndices,links:PLinks,target:i64)->i64 = relation.neighbors_into(output,links,target)
+count @135(links:PLinks)->i64 = relation.active_count(links)
+plastic_run @131()->i64 =
+  from = PIndices(999,999,999,999)
+  to = PIndices(-999,-999,-999,-999)
+  mask = PMask()
+  features = PFeatures(5.0,6.0,7.0,8.0)
+  links = PLinks(mask,to,PNodes(),features,from,PTargets())
+  output = PIndices(77,77,77,77)
+  ok = count(links) == 0 and neighbors(output,links,1) == 0 and output[0] == 77
+  first = add(links,2,1)
+  second = add(links,0,1)
+  third = add(links,2,1)
+  fourth = add(links,1,0)
+  ok = ok and first == 0 and second == 1 and third == 2 and fourth == 3
+  ok = ok and count(links) == 4 and add(links,0,0) == -1
+  removed = remove(links,2)
+  ok = ok and removed and not remove(links,2) and count(links) == 3
+  from[2] = 999
+  ok = ok and add(links,0,0) == 2 and features[2] == 7.0
+  found = neighbors(output,links,1)
+  ok = ok and found == 2 and output[0] == 2 and output[1] == 0 and output[2] == 77 and output[3] == 77
+  // Removal can quarantine a corrupted active edge without reading its endpoints.
+  to[3] = -9
+  removed = remove(links,3)
+  if ok and removed and count(links) == 3 and not mask[3] and from[2] == 0 and to[2] == 0
+    61
+  else
+    0

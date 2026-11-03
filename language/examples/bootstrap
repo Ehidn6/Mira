@@ -1,0 +1,8 @@
+// This profile is parsed and checked by the compiler components on Mira.
+// Eight scalar inputs are admitted; i64 remains a full signed 64-bit word.
+select(enabled:bool,left:i64,right:i64)->i64 = enabled ? left : right
+mix(left:i64,right:i64)->i64 = (left << 3) | (right >> 1)
+valid(code:i64)->bool = code >= 48 and code <= 57
+run()->i64 = select(valid(53),mix(2,8),0)
+space Main:
+  result = run()

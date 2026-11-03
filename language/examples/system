@@ -1,0 +1,15 @@
+// Native x86-64 example. Compile it; do not run as a hosted interpreter program.
+// This demonstrates address/layout access, not a complete device driver.
+type Words = [i64,4]
+kernel()->unit =
+  data = Words.aligned(16)
+  address = sys.data_address(data)
+  sys.store64(address,42)
+  member = sys.address_of(data[2])
+  sys.store64(member,7)
+  // Unknown image procedure identities have no address.
+  absent = sys.procedure_by_id(-1)
+  value = sys.load64(address)
+  if value == 42 and sys.load64(member) == 7 and absent == sys.addr(0)
+    sys.out8(233,75)
+  sys.halt()

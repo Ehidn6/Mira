@@ -1,0 +1,83 @@
+  press @138 ()->unit =
+    k = cells.state()
+    usage = k.usage
+    mods = k.key_modifiers
+    action = editor_action(usage,mods)
+    if (mods & 68) != 0 and (mods & 153) == 0 and usage == 27
+      cells.parent.workspace.palette.toggle()
+    else if (mods & 136) != 0 and (mods & 119) == 0 and usage >= 30 and usage <= 32
+      if cells.parent.workspace.console().palette_open
+        cells.parent.workspace.palette.toggle()
+      cells.parent.workspace.select(usage - 30)
+    else if cells.parent.workspace.console().palette_open and (usage == 41 or usage == 81 or usage == 82 or ((mods & 17) != 0 and (mods & 204) == 0 and (usage == 17 or usage == 19)))
+      cells.parent.workspace.palette(usage == 41 ? 27 : (usage == 81 or usage == 17 ? 258 : 257))
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and usage == 44 and (mods & 17) != 0 and (mods & 204) == 0
+      cells.parent.editor.region(0)
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and action > 0
+      cells.parent.editor.command(action)
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and (mods & 68) != 0 and (mods & 153) == 0 and usage == 26
+      cells.parent.editor.region(1)
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and cells.parent.editor.document().argument_active and mods == 0 and usage >= 30 and usage <= 39
+      d = cells.parent.editor.document()
+      digit = usage == 39 ? 0 : usage - 29
+      d.argument = d.argument_digits ? d.argument * 10 + digit : digit
+      if d.argument > 1000
+        d.argument = 1000
+      d.argument_digits = true
+      cells.parent.workspace.console().dirty = true
+    else if usage == 57
+      k.caps = not k.caps
+    else
+      shifted = (mods & 34) != 0
+      value = 0
+      if usage >= 4 and usage <= 29
+        value = 97 + usage - 4
+        if shifted != k.caps
+          value -= 32
+        if (mods & 17) != 0
+          value = value & 31
+      else if usage >= 30 and usage <= 39 and (mods & 17) == 0
+        symbols = Text("!@#$%^&*()")
+        value = shifted ? symbols[usage - 30] : (usage == 39 ? 48 : 49 + usage - 30)
+      else if usage >= 45 and usage <= 56
+        plain = Text("-=[]\\#;'`,./")
+        upper = Text("_+{}|~:\"~<>?")
+        value = shifted ? upper[usage - 45] : plain[usage - 45]
+      else if usage == 40
+        value = 10
+      else if usage == 42
+        value = 8
+      else if usage == 43
+        value = 9
+      else if usage == 44
+        value = 32
+      if value > 0 and (mods & 204) == 0
+        if cells.parent.workspace.console().palette_open
+          cells.parent.workspace.palette(value)
+        else if cells.parent.editor.document().editing
+          cells.parent.editor(value)
+        else
+          cells.parent.workspace.byte(value)
+
+    byte @130 (index:i64)->i64 = sys.load8(sys.addr(cells.state().data + index))
+    editor_action @136 (usage:i64,mods:i64)->i64 =
+      action = 0
+      if (mods & 17) != 0 and (mods & 204) == 0
+        action = usage == 4 ? 1 : usage == 8 ? 2 : usage == 9 ? 3 : usage == 5 ? 4 : usage == 17 ? 5 : usage == 19 ? 6 : usage == 25 ? 13 : 0
+      else if (mods & 68) != 0 and (mods & 153) == 0
+        action = usage == 9 ? 7 : usage == 5 ? 8 : usage == 25 ? 12 : usage == 42 ? 10 : usage == 7 ? 11 : 0
+        if (mods & 34) != 0
+          if usage == 54
+            action = 16
+          else if usage == 55
+            action = 17
+      else if (mods & 221) == 0 and usage >= 74 and usage <= 82
+        action = usage == 74 ? 1 : usage == 77 ? 2 : usage == 75 ? 12 : usage == 78 ? 13 : usage == 76 ? 14 : usage == 79 ? 3 : usage == 80 ? 4 : usage == 81 ? 5 : 6
+      action
+
+    repeat_allowed @137 (usage:i64,mods:i64)->bool =
+      action = editor_action(usage,mods)
+      navigation = (action >= 1 and action <= 8) or action == 12 or action == 13 or action == 16 or action == 17
+      plain = (mods & 221) == 0 and ((usage >= 4 and usage <= 39) or usage == 42 or usage == 44 or (usage >= 45 and usage <= 56) or (usage >= 74 and usage <= 82))
+      navigation or plain
+

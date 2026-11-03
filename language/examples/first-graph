@@ -1,0 +1,5 @@
+double(value) = value * 2
+space Main:
+  number = 3
+  result = double()
+  number.out -> result.value

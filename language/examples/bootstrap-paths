@@ -1,0 +1,15 @@
+// Paths follow the existing definition tree; physical files need no imports.
+struct PathPair @170:
+  value: i64
+outer @171(value:i64)->i64 =
+  inner(value)
+  inner @172(value:i64)->i64 =
+    leaf(value)
+    leaf @173(value:i64)->i64 = value + 2
+  branch @174(value:i64)->i64 =
+    leaf(value) - 4
+    leaf @176(value:i64)->i64 = value + 7
+path_run @175()->i64 =
+  pair = PathPair(5)
+  value = outer.inner.leaf(pair.value)
+  outer.branch(value) + outer.inner(value)

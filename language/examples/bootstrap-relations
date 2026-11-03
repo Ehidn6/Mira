@@ -1,0 +1,31 @@
+// A relation is an ordinary record with named typed references. Field order is free.
+type NodeFeatures @101 = tensor[f32,3,2]
+type TargetFeatures @102 = tensor[f32,2,2]
+type EdgeIndices @103 = [i64,4]
+type EdgeActive @104 = [bool,4]
+type EdgeMessages @105 = tensor[f32,4,2]
+type EdgeFeatures @106 = tensor[f32,4,1]
+struct GraphLinks @107:
+  active: EdgeActive
+  target_indices: EdgeIndices
+  sources: NodeFeatures
+  features: EdgeFeatures
+  source_indices: EdgeIndices
+  targets: TargetFeatures
+messages @109(output:EdgeMessages,links:GraphLinks)->unit = relation.messages_into(output,links)
+aggregate @110(output:TargetFeatures,links:GraphLinks,input:EdgeMessages)->unit = relation.aggregate_into(output,links,input)
+relation_run @108()->i64 =
+  nodes = NodeFeatures(1.0,2.0,3.0,4.0,5.0,6.0)
+  targets = TargetFeatures()
+  from = EdgeIndices(0,2,1,999)
+  to = EdgeIndices(1,0,1,-999)
+  mask = EdgeActive(true,true,true,false)
+  links = GraphLinks(mask,to,nodes,EdgeFeatures(),from,targets)
+  output = EdgeMessages()
+  messages(output,links)
+  ok = tensor.sum(output) == 21.0 and output[6] == 0.0 and output[7] == 0.0
+  aggregate(targets,links,output)
+  if ok and targets[0] == 5.0 and targets[1] == 6.0 and targets[2] == 4.0 and targets[3] == 6.0
+    53
+  else
+    0

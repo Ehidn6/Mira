@@ -1,0 +1,4 @@
+font8x8_basic: public domain bitmap font.
+Author: Daniel Hepper, based on Marcel Sondaar / IBM public domain VGA fonts.
+Source: https://raw.githubusercontent.com/dhepper/font8x8/master/font8x8_basic.h
+1024 unmodified glyph bytes for U+0000..U+007F.

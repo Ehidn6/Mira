@@ -1,0 +1,182 @@
+  browse @247 (node:i64)->unit =
+    scope = current()
+    valid = node == scope or (reflect.parent(node) == scope and reflect.input_count(node) >= 0)
+    if valid
+      if cells.console().output_region == 0
+        cells.console().graph_selected = node
+        cells.console().sidebars_dirty = true
+      write(Text("Node "))
+      number(node)
+      put(32)
+      name(node)
+      write(Text("\nPorts (in=0, out=1):\n"))
+      // One reusable type-name table; listing ports does not allocate per row.
+      types = Text("i64 f32 bool event unit addr data")
+      data_label = Text(" type-id ")
+      for direction in 0..2
+        count = direction == 0 ? reflect.input_count(node) : reflect.output_count(node)
+        for port in 0..count
+          number(direction)
+          put(47)
+          number(port)
+          put(32)
+          port_name(node,direction,port)
+          put(32)
+          code = reflect.port_type(node,direction,port)
+          word = 1
+          for index in 0..96
+            if types[index] == 32
+              word += 1
+            else if word == code and types[index] != 0
+              put(types[index])
+          data = reflect.port_data_type(node,direction,port)
+          if data > 0
+            write(data_label)
+            number(data)
+          put(10)
+      write(Text("Incident links (source.port -> target.port):\n"))
+      shown = 0
+      for index in 0..reflect.link_count(scope)
+        link = reflect.link_at(scope,index)
+        if reflect.link_source(link) == node or reflect.link_target(link) == node
+          if shown < 32
+            wire(link)
+            shown += 1
+      if shown == 32
+        write(Text("Link display limited to 32 rows.\n"))
+    else
+      write(Text("Choose a cell or boundary of the current space: :i ID\n"))
+
+    name @236 (node:i64)->unit =
+      for index in 0..64
+        byte = reflect.name_byte(node,index)
+        if byte >= 0
+          put(byte)
+      if reflect.name_byte(node,64) >= 0
+        put(46)
+        put(46)
+        put(46)
+
+    port_name @237 (node:i64,direction:i64,port:i64)->unit =
+      for index in 0..64
+        byte = reflect.port_name_byte(node,direction,port,index)
+        if byte >= 0
+          put(byte)
+
+    path @238 (node:i64)->unit =
+      parent = reflect.parent(node)
+      if parent > 0
+        path(parent)
+        put(47)
+      name(node)
+
+    current @239 ()->i64 =
+      c = cells.console()
+      if c.graph_space == 0
+        c.graph_space = reflect.parent(reflect.self())
+      c.graph_space
+
+    argument @240 ()->i64 =
+      input = cells.parent.neural.events.input()
+      length = cells.parent.neural.dynamics.state().input_length
+      value = 0
+      valid = length > 3 and input[2] == 32
+      for index in 3..length
+        digit = input[index] - 48
+        if digit < 0 or digit > 9
+          valid = false
+        if valid
+          if value <= (9223372036854775807 - digit) / 10
+            value = value * 10 + digit
+          else
+            valid = false
+      valid and value > 0 ? value : -1
+
+    endpoint @241 (link:i64,source:bool)->unit =
+      scope = current()
+      node = source ? reflect.link_source(link) : reflect.link_target(link)
+      port = source ? reflect.link_source_port(link) : reflect.link_target_port(link)
+      // A boundary emits from its inputs and receives into its outputs.
+      direction = source ? 1 : 0
+      if node == scope
+        direction = source ? 0 : 1
+      number(node)
+      put(32)
+      name(node)
+      put(46)
+      port_name(node,direction,port)
+
+    wire @242 (link:i64)->unit =
+      number(link)
+      put(32)
+      endpoint(link,true)
+      put(32)
+      put(45)
+      put(62)
+      put(32)
+      endpoint(link,false)
+      put(10)
+
+    show_graph @243 ()->unit =
+      c = cells.console()
+      c.sidebars_dirty = true
+      scope = current()
+      write(Text("Graph path: /"))
+      path(scope)
+      write(Text("\nspace ID/cells/links: "))
+      number(scope)
+      put(47)
+      number(reflect.cell_count(scope))
+      put(47)
+      number(reflect.link_count(scope))
+      write(Text("\nCells page "))
+      number(c.graph_page + 1)
+      put(10)
+      ports = Text(" in/out ")
+      inner_label = Text(" inner ")
+      first = c.graph_page * 16
+      for index in first..first + 16
+        if index < reflect.cell_count(scope)
+          cell = reflect.cell_at(scope,index)
+          number(cell)
+          put(32)
+          name(cell)
+          write(ports)
+          number(reflect.input_count(cell))
+          put(47)
+          number(reflect.output_count(cell))
+          inner = reflect.inner(cell)
+          if inner > 0
+            write(inner_label)
+            number(inner)
+          put(10)
+      write(Text(":i ID inspect | :z ID enter | :o outer | :n next | :m previous\n"))
+      write(Text("This is the running image; editing the source does not change this graph.\n"))
+
+    enter @244 (node:i64)->unit =
+      scope = current()
+      if node > 0 and reflect.parent(node) == scope and reflect.inner(node) > 0
+        cells.console().graph_space = reflect.inner(node)
+        cells.console().graph_page = 0
+        show_graph()
+      else
+        write(Text("Choose a cell with an inner space in the current graph: :z ID\n"))
+
+    outer @245 ()->unit =
+      scope = current()
+      owner = reflect.parent(scope)
+      if owner > 0
+        cells.console().graph_space = reflect.parent(owner)
+        cells.console().graph_page = 0
+        show_graph()
+      else
+        write(Text("Already at the root space.\n"))
+
+    page @246 (direction:i64)->unit =
+      scope = current()
+      c = cells.console()
+      next = c.graph_page + direction
+      if next >= 0 and (next == 0 or next * 16 < reflect.cell_count(scope))
+        c.graph_page = next
+      show_graph()
+

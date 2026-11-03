@@ -1,0 +1,33 @@
+// A small candidate ranker, not a type checker. The same persistent graph and
+// CPU tensor runtime are used for learning; no model-specific Rust arithmetic.
+type Features @2 = tensor[f32,8]
+type Weights @3 = tensor[f32,8,8]
+type Choice @4 = [i64,1]
+type Response @5 = tensor[f32,1]
+features @6()->Features = Features.persist()
+weights @7()->Weights = Weights.persist()
+choice @8()->Choice = Choice.persist()
+response @9()->Response = Response.persist()
+score @10()->f32 =
+  x = cells.features()
+  w = cells.weights()
+  row = cells.choice()[0] * 8
+  result = 0.0
+  for i in 0..8
+    result += w[row + i] * x[i]
+  result
+train @11()->unit =
+  error = cells.response()[0] - score()
+  x = cells.features()
+  w = cells.weights()
+  row = cells.choice()[0] * 8
+  for i in 0..8
+    w[row + i] += 0.1 * error * x[i]
+run @12()->unit = ()
+space Assistant @1:
+  model @100 = run():
+    space State @101:
+      features @102 = features()
+      weights @103 = weights()
+      choice @104 = choice()
+      response @105 = response()

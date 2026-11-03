@@ -1,0 +1,65 @@
+install(handler: addr, vector: i64) -> unit =
+  entry = sys.offset(sys.addr(8388608), vector * 16)
+  bits = sys.address_value(handler)
+  sys.store16(entry, bits & 65535)
+  sys.store16(sys.offset(entry, 2), sys.cs())
+  sys.store8(sys.offset(entry, 4), 0)
+  sys.store8(sys.offset(entry, 5), 142)
+  sys.store16(sys.offset(entry, 6), (bits >> 16) & 65535)
+  sys.store32(sys.offset(entry, 8), bits >> 32)
+  sys.store32(sys.offset(entry, 12), 0)
+prepare() -> unit =
+  sys.cli()
+  for index in 0..512
+    sys.store64(sys.offset(sys.addr(8388608), index * 8), 0)
+  sys.store16(sys.addr(8392704), 4095)
+  sys.store64(sys.addr(8392706), 8388608)
+  sys.lidt(sys.addr(8392704))
+type Events = [i64,2]
+type Weights = tensor[f32,2]
+events()->Events = Events.persist()
+weights()->Weights = Weights.persist()
+worker()->unit =
+  w = cells.weights()
+  w[0] = 99.0
+  for i in 0..50000
+    w[1] += 0.001
+on_timer(frame:addr,error:i64)->unit =
+  event = cells.events()
+  event[0] += 1
+  attempted = sys.neural_try(worker,1000,0)
+  event[1] = sys.neural_status()
+  sys.out8(32,32)
+boot()->unit =
+  prepare()
+  install(sys.interrupt_handler(on_timer),32)
+  sys.out8(32,17)
+  sys.out8(160,17)
+  sys.out8(33,32)
+  sys.out8(161,40)
+  sys.out8(33,4)
+  sys.out8(161,2)
+  sys.out8(33,1)
+  sys.out8(161,1)
+  sys.out8(33,254)
+  sys.out8(161,255)
+  sys.out8(67,54)
+  sys.out8(64,169)
+  sys.out8(64,4)
+  sys.sti()
+  ok = sys.neural_try(worker,10000000,4096)
+  sys.cli()
+  event = cells.events()
+  w = cells.weights()
+  if not ok and sys.neural_status() == 5 and event[0] > 0 and event[1] == 6 and w[0] == 0.0 and w[1] == 0.0
+    sys.out8(233,84)
+  else
+    sys.out8(233,70)
+    sys.out8(233,48 + sys.neural_status())
+  sys.out8(233,33)
+  sys.halt()
+space IRQCheck:
+  kernel @100 = boot():
+    space internal @101:
+      events @102 = events()
+      weights @103 = weights()

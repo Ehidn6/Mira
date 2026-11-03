@@ -1,0 +1,8 @@
+// Types come from operations and callers; graph links are constraints too.
+scale(value) = value * 2.0
+identity(value) = value
+run()->f32 = scale(3.0)
+space Main:
+  number = 7
+  result = identity()
+  number.out -> result.value

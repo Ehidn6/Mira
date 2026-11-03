@@ -1,0 +1,16 @@
+[package]
+name = "mira-lang"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+mira-core = { path = "../mira-core" }
+serde_json = { version = "=1.0.154", features = ["unbounded_depth"] }
+blake3 = "=1.8.7"
+
+[[bin]]
+name = "mira"
+path = "src/main.rs"

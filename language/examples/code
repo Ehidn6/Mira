@@ -1,0 +1,25 @@
+// Code is the same tree used by the compiler. Local expression indices are
+// scoped to a definition and revision; they are not new runtime identities.
+calculate @2(value:i64)->i64 = value + 1
+increment @20(value)->i64 = ?body
+macro extend()->unit =
+  node = meta.quote(2,0)
+  two = meta.integer(2)
+  expression = meta.binary(2,node,two)
+  meta.replace(node,expression)
+  target = meta.quote(20,0)
+  parameter = meta.parameter(20,0)
+  one = meta.integer(1)
+  body = meta.binary(0,parameter,one)
+  meta.replace(target,body)
+probe()->i64 =
+  root = reflect.code_kind(2,0)
+  right = reflect.code_child(2,0,1)
+  valid = root == 7 and reflect.code_value(2,right) == 2
+  valid ? 1 : 0
+space Main @1:
+  input = 3
+  output = calculate()
+  input.out -> output.value
+  inspector = probe()
+expand extend()

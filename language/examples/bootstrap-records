@@ -1,0 +1,23 @@
+type Values @1 = [i64,3]
+struct Counter @2:
+  count: i64
+  enabled: bool
+struct View @3:
+  counter: Counter
+  values: Values
+  len: i64
+next @4(counter:Counter)->i64 =
+  counter.count += 1
+  counter.count - 1
+update @5(view:View)->unit =
+  view.values[next(view.counter)] += next(view.counter)
+  view.len += 1
+  view.counter.enabled = true
+run @6()->i64 =
+  counter = Counter()
+  view = View(counter,Values(10,20,30),7)
+  update(view)
+  if counter.enabled
+    view.values[0] * 100 + counter.count * 10 + view.len
+  else
+    0

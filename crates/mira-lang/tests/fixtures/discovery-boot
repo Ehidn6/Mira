@@ -1,0 +1,57 @@
+boot @164 ()->unit =
+  accepted = sys.neural_try(cells.neural.initialize,300000,4096)
+  s = cells.neural.dynamics.state()
+  s.world_enabled = true
+  contained = sys.neural_try(cells.neural.discover,1,8192)
+  rollback = not contained and s.world_steps == 0 and s.memory_count == 0
+  for step in 0..64
+    s.pulse = 511
+    sys.scratch(cells.neural,32768)
+  ok = accepted and rollback and s.world_steps == 64 and s.steps == 64 and s.updates >= 64 and s.failures == 0
+  before = tensor.sum(cells.neural.topology.head())
+  ok = ok and before != 0.0
+  metric(s.world_first)
+  metric(s.world_recent)
+  context = Context()
+  changed = Context()
+  cells.neural.discover.features(context,1)
+  cells.neural.discover.control(true)
+  cells.neural.discover.features(changed,1)
+  ok = ok and s.world_rule == 1 and s.world_phase_steps == 0 and s.world_steps == 64
+  ok = ok and tensor.sum(cells.neural.topology.head()) == before and s.memory_count == 32
+  for index in 0..32
+    ok = ok and context[index] == changed[index]
+  for step in 0..64
+    s.pulse = 511
+    sys.scratch(cells.neural,32768)
+  ok = ok and s.world_steps == 128 and s.world_phase_steps == 64 and s.steps == 128 and s.failures == 0
+  metric(s.world_first)
+  metric(s.world_recent)
+  count = 0
+  for row in 0..32
+    count += cells.neural.memory.provenance()[row * 4] == 2 ? 1 : 0
+  ok = ok and count == 32
+  // Round-trip the actual checkpoint codec; no fake disk/restart claim.
+  snapshot = Snapshot()
+  cells.storage.state().snapshot = sys.address_value(sys.data_address(snapshot))
+  cells.storage.save.pack_snapshot()
+  ok = ok and cells.storage.load.snapshot_valid()
+  saved = snapshot[29]
+  snapshot[30] = 2
+  ok = ok and not cells.storage.load.snapshot_valid()
+  snapshot[30] = s.world_hidden
+  s.world_steps = 0
+  tensor.fill(cells.neural.topology.head(),0.0)
+  cells.storage.load.unpack_snapshot()
+  s = cells.neural.dynamics.state()
+  ok = ok and s.world_steps == saved and s.world_rule == 1 and tensor.sum(cells.neural.topology.head()) != 0.0
+  sys.out8(233,ok ? 68 : 70)
+  sys.out8(233,33)
+  sys.halt()
+
+  metric(value:f32)->unit =
+    bits = math.bits(value)
+    for index in 0..8
+      digit = (bits >> ((7 - index) * 4)) & 15
+      sys.out8(233,digit < 10 ? digit + 48 : digit + 87)
+    sys.out8(233,32)

@@ -1,0 +1,21 @@
+// Explicit low-level access to a caller-provided address, not a safe reference.
+// Caller must provide at least16 writable/readable bytes and maintain lifetime.
+memory @151(address:addr)->i64 =
+  sys.store64(address,-1)
+  sys.store8(sys.offset(address,1),18)
+  sys.store16(sys.offset(address,2),13398)
+  sys.store32(sys.offset(address,4),2023406814)
+  sys.store64(sys.offset(address,8),-9223372036854775808)
+  ok = sys.load8(address) == 255 and sys.load8(sys.offset(address,1)) == 18
+  ok = ok and sys.load16(sys.offset(address,2)) == 13398 and sys.load32(sys.offset(address,4)) == 2023406814
+  ok = ok and sys.load64(address) == 0x789abcde345612ff and sys.load64(sys.offset(address,8)) == -9223372036854775808
+  if ok and sys.address_value(sys.offset(address,8)) - sys.address_value(address) == 8
+    73
+  else
+    0
+memory_run @152()->i64 =
+  high = sys.addr(-1)
+  if sys.address_value(high) == -1 and sys.address_value(sys.offset(high,-1)) == -2
+    73
+  else
+    0

@@ -1,0 +1,3 @@
+// A draft, not executable code. '?' carries a name for the editor/assistant.
+calculate @2(value) -> i64 = value + ?adjustment
+space Main @1:

@@ -1,0 +1,19 @@
+// A component is an ordinary code cell with its own state and Z body.
+// Operations are local definitions, not extra runtime cells per function.
+type Memory = tensor[f32,1]
+store()->f32 =
+  state()->Memory = Memory.persist()
+  increment()->f32 =
+    memory = cells.memory()
+    memory[0] += 1.0
+    memory[0]
+  increment()
+relay()->f32 = cells.parent.store.increment()
+step()->f32 = cells.relay()
+space Main:
+  kernel = step():
+    space Internal:
+      relay = relay()
+      store = store():
+        space Store:
+          memory = store.state()

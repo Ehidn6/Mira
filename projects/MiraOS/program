@@ -1,0 +1,66 @@
+identities 423
+
+
+// Native autonomous neural graph. One BSP; bounded steps; optional disk checkpoints.
+// Numeric event prediction and associative recall, not language understanding.
+space MiraOS @1:
+type Text  @2 = [i64,96]
+
+boot @164 ()->unit =
+  cells.workspace.init()
+  cells.display.init()
+  cells.hardware.init()
+  source_buffer = cells.hardware.physical_allocate((SourceBuffer.size_bytes() + 4095) / 4096,4096)
+  if source_buffer == 0
+    cells.workspace.write(Text("No physical memory for the source editor\n"))
+    sys.halt()
+  source_history = SourceUndo()
+  cells.editor.start(sys.addr(source_buffer),source_history)
+  sys.scratch(cells.workspace.frame,4096)
+  sys.scratch(cells.display,37000)
+  accepted = sys.neural_try(cells.neural.initialize,300000,4096)
+  if not accepted
+    cells.neural.dynamics.state().quarantined = true
+  cells.editor.document().staging = cells.hardware.physical_allocate((SourceStaging.size_bytes() + 4095) / 4096,4096)
+  cells.editor.document().clipboard = cells.hardware.physical_allocate(32,4096)
+  cells.editor.document().part_index = cells.hardware.physical_allocate(16,4096)
+  cells.editor.document().view_cache = cells.hardware.physical_allocate(1,4096)
+  snapshot = Snapshot()
+  cells.storage.disk_start(snapshot)
+  cells.storage.load()
+  cells.source_storage.load()
+  sys.scratch(cells.workspace.show_boot,24576)
+  if cells.hardware.state().xhci_count > 0
+    accepted = cells.keyboard.start()
+    sys.scratch(cells.keyboard.report,2048)
+  while true
+    sys.scratch(cells.workspace,16384)
+    cells.storage()
+    cells.source_storage()
+    cells.hardware()
+    cells.usb()
+    cells.keyboard()
+    cells.keyboard.repeat()
+    cells.source_analysis()
+    sys.scratch(cells.neural,32768)
+    cells.storage()
+    if cells.workspace.console().frame_dirty or cells.workspace.console().sidebars_dirty or cells.editor.document().redraw or cells.workspace.console().dirty
+      cells.workspace.console().palette_dirty = true
+    if cells.workspace.console().frame_dirty
+      sys.scratch(cells.workspace.frame,4096)
+    if cells.workspace.console().sidebars_dirty
+      sys.scratch(cells.workspace.sidebars,8192)
+    if cells.editor.document().redraw
+      cells.editor.document().redraw = false
+      sys.scratch(cells.display,37000)
+    if cells.workspace.console().dirty
+      cells.workspace.console().dirty = false
+      sys.scratch(cells.display.status,6144)
+    if cells.workspace.console().palette_open and cells.workspace.console().palette_dirty
+      sys.scratch(cells.workspace.palette.draw,32768)
+    sys.pause()
+
+// The editable source is independent of its screen view and of the running image.
+// Its byte/history buffers are owned by boot(), never by a neural transaction.
+
+  kernel @100 = boot():

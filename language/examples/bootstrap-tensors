@@ -1,0 +1,33 @@
+// Existing tensor syntax and operations, compiled by Mira's own module driver.
+type Matrix @1 = tensor[f32,2,2]
+type SameShape @2 = tensor[f32,2,2]
+reference @3(left:Matrix,right:Matrix,output:Matrix)->unit =
+  for row in 0..2
+    for column in 0..2
+      value = 0.0
+      for inner in 0..2
+        value += left[row * 2 + inner] * right[inner * 2 + column]
+      output[row * 2 + column] = value
+multiply @5(left:Matrix,right:Matrix,output:Matrix)->unit = tensor.matmul_into(output,left,right)
+run @4()->i64 =
+  a = Matrix(1.0,2.0,3.0,4.0)
+  b = SameShape()
+  c = Matrix()
+  tensor.fill(b,0.5)
+  tensor.add_into(c,a,b)
+  tensor.scale_into(c,c,2.0)
+  ok = tensor.sum(c) == 24.0
+  tensor.copy_into(b,c)
+  tensor.sub_into(c,c,b)
+  ok = ok and tensor.sum(c) == 0.0
+  tensor.mul_into(c,b,a)
+  ok = ok and tensor.sum(c) == 70.0
+  tensor.div_into(c,c,b)
+  ok = ok and tensor.sum(c) == 10.0
+  reference(a,a,c)
+  ok = ok and tensor.sum(c) == 54.0
+  multiply(a,a,c)
+  if ok and c.len == 4 and tensor.sum(c) == 54.0 and c[0] == 7.0 and c[3] == 22.0
+    41
+  else
+    0

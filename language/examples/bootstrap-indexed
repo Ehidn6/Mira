@@ -1,0 +1,24 @@
+// Indexed dense operations share the message-passing loops; no graph adapter.
+type DenseNodes @140 = tensor[f32,3,2]
+type DenseMessages @141 = tensor[f32,4,2]
+type DenseTargets @142 = tensor[f32,2,2]
+type DenseIndices @143 = [i64,4]
+gather @145(output:DenseMessages,input:DenseNodes,indices:DenseIndices)->unit = tensor.gather_into(output,input,indices)
+scatter @146(output:DenseTargets,input:DenseMessages,indices:DenseIndices)->unit = tensor.aggregate_into(output,input,indices)
+normalize @147(output:DenseTargets,input:DenseTargets)->unit = tensor.normalize_rows_into(output,input)
+indexed_run @148()->i64 =
+  nodes = DenseNodes(1.0,2.0,3.0,4.0,5.0,6.0)
+  messages = DenseMessages()
+  gather(messages,nodes,DenseIndices(2,0,2,1))
+  output = DenseTargets()
+  scatter(output,messages,DenseIndices(1,0,1,0))
+  ok = messages[0] == 5.0 and messages[2] == 1.0 and messages[4] == 5.0 and messages[6] == 3.0
+  ok = ok and output[0] == 4.0 and output[1] == 6.0 and output[2] == 10.0 and output[3] == 12.0
+  input = DenseTargets(3.0,4.0,0.0,0.0)
+  normalize(output,input)
+  ok = ok and output[0] == 0.6 and output[1] == 0.8 and output[2] == 0.0 and output[3] == 0.0
+  normalize(input,input)
+  if ok and input[0] == output[0] and input[1] == output[1] and input[2] == 0.0 and input[3] == 0.0
+    67
+  else
+    0

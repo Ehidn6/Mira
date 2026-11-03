@@ -1,0 +1,35 @@
+// References returned by these functions remain owned by their caller.
+type LoanValues @180 = [i64,2]
+struct LoanView @181:
+  values: LoanValues
+type LoanTensor @187 = tensor[f32,2]
+loan_tensor @188(value:LoanTensor)->LoanTensor = value
+loan_view @189(view:LoanView)->LoanView = view
+loan_identity @182(value:LoanValues)->LoanValues = value
+loan_choose @183(left:LoanValues,right:LoanValues,second:bool)->LoanValues = second ? right : left
+loan_child @184(view:LoanView)->LoanValues = view.values
+loan_recur @185(value:LoanValues,steps:i64)->LoanValues =
+  temporary = LoanValues(steps,steps)
+  if steps == 0
+    loan_identity(value)
+  else
+    loan_recur(value,steps - 1)
+loan_update @190(value:LoanValues,index:i64)->LoanValues =
+  temporary = LoanValues(91,92)
+  value[index] += 1
+  value
+loan_run @186()->i64 =
+  left = LoanValues(10,20)
+  right = LoanValues(30,40)
+  view = LoanView(left)
+  first = loan_recur(loan_child(loan_view(view)),3)
+  first = loan_update(first,0)
+  alias = loan_choose(first,right,true)
+  alias[1] += 7
+  for step in 0..64
+    same = loan_recur(first,3)
+    same[1] = left[1]
+  tensor = LoanTensor(1.0,2.0)
+  borrowed = loan_tensor(tensor)
+  tensor.scale_into(borrowed,borrowed,2.0)
+  tensor.sum(tensor) == 6.0 ? first[0] + left[1] + right[0] + alias[1] : 0

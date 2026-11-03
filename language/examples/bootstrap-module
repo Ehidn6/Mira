@@ -1,0 +1,9 @@
+// Forward references, a preserved explicit identity and recursive calls.
+identities 10
+run @40()->i64 = combine(6,4) + factorial(4)
+combine(left:i64,right:i64)->i64 = left * 10 + right
+factorial(value:i64)->i64 =
+  result = 1
+  if value > 1
+    result = value * factorial(value - 1)
+  result

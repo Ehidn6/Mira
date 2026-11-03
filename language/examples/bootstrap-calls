@@ -1,0 +1,15 @@
+// Calls share the existing procedure symbols and relocation/linker path.
+combine(left:i64,right:i64)->i64 = left * 10 + right
+factorial(value:i64)->i64 =
+  if value <= 1
+    1
+  else
+    value * factorial(value - 1)
+compute(limit:i64)->i64 =
+  result = 0
+  for index in 0..limit
+    result += combine(index,1)
+  result + factorial(limit)
+run()->i64 = compute(4)
+space Main:
+  result = run()

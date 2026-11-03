@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/mira-core",
+  "crates/mira-lang",
+]
+
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
