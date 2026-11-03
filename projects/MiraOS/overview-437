@@ -4,8 +4,6 @@
       old_x = c.x
       old_y = c.y
       old_region = c.output_region
-      for row in 32..c.editor_bottom * 16
-        sys.memory_fill(sys.offset(sys.addr(c.framebuffer),row * c.stride + c.source_left * 32),0,(c.source_right - c.source_left) * 32)
       title = text(Text("LIVE | computation, learning and experience"),c.source_left + 1,2,color(101,203,214))
       c.output_region = 4
       c.x = c.source_left + 1
@@ -64,6 +62,9 @@
       if d.blocked
         cells.parent.workspace.write(Text("Source storage: blocked; inspect source info\n"))
       cells.parent.workspace.write(Text("\nSuper+2 edit | Super+3 log | Alt+X commands\n"))
+      // Erase only rows no longer occupied when a section becomes shorter.
+      for row in c.y * 16..c.editor_bottom * 16
+        sys.memory_fill(sys.offset(sys.addr(c.framebuffer),row * c.stride + (c.source_left + 1) * 32),0,(c.source_right - c.source_left - 2) * 32)
       c.output_region = old_region
       c.x = old_x
       c.y = old_y

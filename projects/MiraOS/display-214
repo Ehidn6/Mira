@@ -129,8 +129,12 @@ display @214 ()->unit =
           scan = sys.offset(base,row * 2 * stride)
           for pixel in 0..8
             value = ((bits >> pixel) & 1) == 1 ? color : background
-            sys.store32(sys.offset(scan,pixel * 4),value)
-            sys.store32(sys.offset(scan,stride + pixel * 4),value)
+            upper = sys.offset(scan,pixel * 4)
+            lower = sys.offset(scan,stride + pixel * 4)
+            if sys.load32(upper) != value
+              sys.store32(upper,value)
+            if sys.load32(lower) != value
+              sys.store32(lower,value)
 
   number @207 (value:i64,column:i64,line:i64,color:i64)->i64 =
     end = column
@@ -194,6 +198,10 @@ display @214 ()->unit =
         top = 4
         bottom = c.editor_bottom
       if code == 10
+        // A shorter replacement line must remove its old suffix, not its label.
+        if c.output_region == 4 and c.y >= top and c.y < bottom and c.x < right
+          for scan in c.y * 16..(c.y + 1) * 16
+            sys.memory_fill(sys.offset(sys.addr(c.framebuffer),scan * c.stride + c.x * 32),0,(right - c.x) * 32)
         c.x = left
         c.y += 1
       else if code == 13
@@ -227,7 +235,6 @@ display @214 ()->unit =
     c = cells.parent.workspace.console()
     if c.video
       row = c.rows - 1
-      sys.memory_fill(sys.offset(sys.addr(c.framebuffer),row * 16 * c.stride),0,16 * c.stride)
       color = display.color(101,203,214)
       end = text(Text("steps "),1,row,color)
       end = number(cells.parent.neural.dynamics.state().steps,end,row,color)
@@ -249,6 +256,9 @@ display @214 ()->unit =
       if d.argument_active
         end = text(Text(" | ARG "),end,row,color)
         end = number(d.argument,end,row,color)
+      if end < c.columns
+        for scan in row * 16..(row + 1) * 16
+          sys.memory_fill(sys.offset(sys.addr(c.framebuffer),scan * c.stride + end * 32),0,(c.columns - end) * 32)
       if d.check_status > 0
         marker = d.check_revision != d.revision ? 63 : (d.check_status == 2 ? 43 : 33)
         text.glyph(marker,c.columns - 3,row,color,0)

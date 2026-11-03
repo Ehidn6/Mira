@@ -127,17 +127,21 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         assert 'QMP' in json.loads(stream.readline())
         qmp('qmp_capabilities')
 
-    def capture(name):
+    def picture(name):
         path = out / (name + '.ppm')
+        qmp('screendump', {'filename': str(path)})
+        with path.open('rb') as file:
+            assert file.readline().strip() == b'P6'
+            width, height = map(int, file.readline().split())
+            assert file.readline().strip() == b'255'
+            pixels = file.read()
+        return width, height, pixels
+
+    def capture(name):
         previous = None
         for _ in range(30):
             settle(.2)
-            qmp('screendump', {'filename': str(path)})
-            with path.open('rb') as picture:
-                assert picture.readline().strip() == b'P6'
-                width, height = map(int, picture.readline().split())
-                assert picture.readline().strip() == b'255'
-                pixels = picture.read()
+            width, height, pixels = picture(name)
             # Paint is cooperative and can span host display refreshes. Ignore
             # only the live status footer when waiting for a complete static view.
             visible = pixels[:width*(height-32)*3]
@@ -226,6 +230,33 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
                     changed = True
                     break
             assert changed, 'Live state did not refresh without input'
+            # Sample intermediate frames rather than waiting for a finished
+            # repaint. A full clear used to blank this unchanged section label.
+            baseline = capture('native-overview-steady')
+            columns = baseline[0] // 8
+            left = (min(columns // 6, 32) + 2) * 8
+            heading_box = (left, 12 * 16, left + 18 * 8, 13 * 16)
+            heading = crop(baseline, *heading_box)
+            assert any(heading), 'Missing prediction section heading'
+            footer_row = (baseline[1] // 16 - 1) * 16
+            footer_box = (8, footer_row, 48, footer_row + 16)
+            footer = crop(baseline, *footer_box)
+            assert any(footer), 'Missing live status footer'
+            previous_view = live_region(baseline)
+            refreshes = 0
+            samples = 0
+            end = time.monotonic() + 15
+            while time.monotonic() < end and (samples < 40 or refreshes < 2):
+                settle(.04)
+                current = picture('native-overview-intermediate')
+                assert crop(current, *heading_box) == heading, 'Unchanged text vanished during a live update'
+                assert crop(current, *footer_box) == footer, 'Status label vanished during a live update'
+                view = live_region(current)
+                if view != previous_view:
+                    refreshes += 1
+                    previous_view = view
+                samples += 1
+            assert refreshes >= 2, 'Did not observe live refreshes during the flicker check'
             console_command('p', b'autonomy pause changed')
             press('esc')
             paused = live_region(capture('native-overview-paused'))
@@ -243,6 +274,13 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             found = re.search(rb'world enabled/rule/steps/phase-steps/action: 1/\d+/(\d+)/', transcript[start:])
             assert found and int(found.group(1)) > 0, bytes(transcript[start:])
             press('esc')
+            start = action('world toggle')
+            wait(b'world experiment toggled', start, 8)
+            press('esc')
+            shorter = capture('native-overview-shorter')
+            # The enabled experiment adds three lines. Its former footer must
+            # disappear when the shorter view replaces it without a full clear.
+            assert not any(crop(shorter, left, 30 * 16, left + 60 * 8, 31 * 16)), 'Shorter overview left stale text below its footer'
             start = action('source open 231')
             wait(b'SOURCE:', start, 15)
             press('ctrl', 'e')
@@ -277,7 +315,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             press('esc')
             assert info() == after_undo, 'Legacy layout cycle left the hidden editor focused'
             assert b'LIVE | computation' not in transcript, 'Overview polluted the console log'
-            print('PASS: live overview refresh, pause, prediction experiment, source opening, global/palette layouts, draft/cursor/Undo preservation and input isolation')
+            print(f'PASS: overview refresh and pause, steady heading/footer across {samples} intermediate frames ({refreshes} changes), shorter-view cleanup, prediction experiment, layouts and draft/cursor/Undo preservation')
             qmp('quit')
             assert process.wait(timeout=5) == 0
             sys.exit(0)
