@@ -70,6 +70,11 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         end = min(deadline, time.monotonic() + seconds)
         while marker not in transcript[start:]:
             if process.poll() is not None or time.monotonic() > end:
+                if process.poll() is None and stream is not None:
+                    try:
+                        qmp('screendump', {'filename': str(out / 'object-navigation-failed.ppm')})
+                    except (OSError, RuntimeError):
+                        pass
                 raise RuntimeError(f'Missing serial marker {marker!r}')
             pump()
 
@@ -93,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             qmp('input-send-event', {'events': [
                 {'type': 'key', 'data': {'down': down, 'key': {'type': 'qcode', 'data': key}}}
                 for key in ordered]})
-            settle()
+            settle(.12 if '--runner-only' in sys.argv else .07)
 
     def console_command(letter, marker):
         start = len(transcript)
@@ -149,7 +154,8 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
     def type_text(text):
         punctuation = {' ': ('spc',), '\n': ('ret',), '_': ('shift', 'minus'),
             '(': ('shift', '9'), ')': ('shift', '0'), ':': ('shift', 'semicolon'),
-            '=': ('equal',), '.': ('dot',), '-': ('minus',), '>': ('shift', 'dot'), '/': ('slash',)}
+            '=': ('equal',), '.': ('dot',), '-': ('minus',), '>': ('shift', 'dot'), '/': ('slash',),
+            '@': ('shift','2'), '*': ('shift','8'), '+': ('shift','equal'), ',': ('comma',)}
         for char in text:
             if char in punctuation:
                 press(*punctuation[char])
@@ -189,6 +195,62 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             subprocess.run(['hyprctl', 'dispatch',
                 f'hl.dsp.focus({{window="address:{previous_focus}"}})'],
                 check=True, stdout=subprocess.DEVNULL, timeout=5)
+        if '--runner-only' in sys.argv:
+            original = (image / 'source.mira').read_bytes()
+            matched = re.search(rb'(?m)^([ ]*)layout @231',original)
+            assert matched, 'Missing existing selected source function'
+            prefix = matched.group(1).decode()
+
+            def action(query):
+                press('alt','x')
+                type_text(query)
+                start = len(transcript)
+                press('ret')
+                return start
+
+            start = action('source open 231')
+            wait(b'SOURCE:',start,15)
+
+            def replace_object(body, result_type='i64'):
+                press('alt','shift','comma')
+                press('ctrl','spc')
+                press('alt','shift','dot')
+                press('ctrl','w')
+                text = prefix + 'layout @231()->' + result_type + ' = ' + body
+                type_text(text)
+
+            replace_object('6 * 7\n')
+            start = action('source run')
+            wait(b'RUN result: 42',start,30)
+            capture('native-editor-run-42')
+            start = action('source run')
+            wait(b'RUN result: 42',start,10)
+            assert b'COMPILE:' not in transcript[start:] and b'COMPILE ready' not in transcript[start:], 'Unchanged source was recompiled'
+            replace_object('7 * 8\n')
+            start = action('source run')
+            wait(b'RUN result: 56',start,30)
+            replace_object('1 / 0\n')
+            start = action('source run')
+            wait(b'RUN stopped: division by zero',start,30)
+            # A bounded infinite loop must return control to the editor.
+            replace_object('\n'+prefix+'  while true\n'+prefix+'    ()\n'+prefix+'  0\n')
+            start = action('source run')
+            wait(b'RUN stopped: operation budget exhausted',start,30)
+            replace_object('sys.load64(sys.addr(0))\n')
+            start = action('source run')
+            wait(b'COMPILE rejected: raw addresses',start,30)
+            capture('native-editor-run-rejected')
+            replace_object('10000000.0\n','f32')
+            start = action('source run')
+            wait(b'RUN result: 1.000e7',start,30)
+            # A rejected input cannot poison the next edit/compilation.
+            replace_object('40 + 2\n')
+            start = action('source run')
+            wait(b'RUN result: 42',start,30)
+            print('PASS: native editor edit/compile/run, cache, revision invalidation, division/fuel errors, raw-access rejection and recovery')
+            qmp('quit')
+            assert process.wait(timeout=5) == 0
+            sys.exit(0)
         if '--ui-only' in sys.argv:
             initial_picture = capture('workspace-output-hidden')
             width, height, _ = initial_picture
@@ -374,6 +436,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         assert note[:-1] in restored_line,restored_line
         print('PASS: embedded compiler/parser source objects, graphical USB source-object open/parent/project, scope bounds, palette selection, cursor/dirty preservation, cross-object Undo, exact whole-project save, and restart restore')
     finally:
+        (out / 'object-navigation-serial.log').write_bytes(transcript)
         (out/'object-navigation.log').write_bytes(transcript)
         if stream is not None:
             if process.poll() is None:

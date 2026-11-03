@@ -833,3 +833,30 @@ fn ordinary_arrays_use_the_existing_buffer_word_limit() {
             .contains(&format!("array length exceeds {limit} words"))
     );
 }
+
+#[test]
+fn scratch_borrows_flat_inputs_and_reclaims_only_temporary_data() {
+    use std::{os::unix::fs::PermissionsExt,process::Command};
+    let source = include_str!("../../../language/examples/scratch-inputs");
+    let program = syntax::parse(source).unwrap();
+    let result = mira_lang::runtime::execute(&program,1).unwrap();
+    assert_eq!(result.terminals[0].1,1007);
+    let path = std::env::temp_dir().join(format!("mira-scratch-inputs-{}",std::process::id()));
+    std::fs::write(&path,mira_lang::native::compile(&program).unwrap()).unwrap();
+    std::fs::set_permissions(&path,std::fs::Permissions::from_mode(0o700)).unwrap();
+    let native = Command::new(&path).output().unwrap();
+    assert!(native.status.success());
+    assert_eq!(String::from_utf8(native.stdout).unwrap().trim(),"1007");
+    std::fs::remove_file(&path).unwrap();
+    let shared = "type Words = [i64,1]\nstate()->Words = Words.persist()\nchange(values:Words)->i64 =\n  values[0] += 1\n  values[0]\nread()->i64 = sys.scratch(change,32,cells.memory())\nrun()->i64 = sys.read_only(read,4096)\nspace Main:\n  result = run():\n    space State:\n      memory = state()\n";
+    let shared = syntax::parse(shared).unwrap();
+    assert!(mira_lang::native::compile(&shared).is_err(), "nested scratch bypassed read-only protection");
+    for invalid in [
+        source.replace("touch,64,values,1","touch,64,values,true"),
+        source.replace("touch,64,values,1","touch,64,values"),
+        "type Values = [i64,2]\nstruct Box:\n  values: Values\nwork(box:Box)->i64 = box.values[0]\nrun()->i64 = sys.scratch(work,64,Box(Values()))\nspace Main:\n  result = run()\n".into(),
+        "type Values = [i64,2]\nwork(values:Values)->Values = Values()\nrun()->Values = sys.scratch(work,64,Values())\nspace Main:\n  result = run()\n".into(),
+    ] {
+        assert!(syntax::parse(&invalid).is_err() || mira_lang::native::compile(&syntax::parse(&invalid).unwrap()).is_err());
+    }
+}

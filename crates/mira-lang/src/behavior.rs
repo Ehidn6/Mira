@@ -197,8 +197,8 @@ pub(crate) fn expression(
                 return crate::intrinsics::native_signature(name, &argtypes).unwrap();
             }
             if matches!(name.as_str(), "sys.scratch" | "sys.read_only") {
-                let [Expr::Name(target), bytes] = args.as_slice() else {
-                    return Err("scratch expects a behavior symbol and byte limit".into());
+                let [Expr::Name(target), bytes, supplied @ ..] = args.as_slice() else {
+                    return Err("scratch expects a behavior symbol, byte limit and optional inputs".into());
                 };
                 if env.contains_key(target) {
                     return Err("scratch entry must be a behavior symbol".into());
@@ -206,11 +206,19 @@ pub(crate) fn expression(
                 let (parameters, result) = signatures
                     .get(target)
                     .ok_or("scratch entry behavior missing")?;
-                if !parameters.is_empty() || matches!(result, Type::Data(_)) {
-                    return Err(
-                        "scratch entry must have no inputs and cannot return a temporary reference"
-                            .into(),
-                    );
+                if parameters.len() != supplied.len() || (name == "sys.read_only" && !supplied.is_empty()) {
+                    return Err("scratch: wrong input count".into());
+                }
+                if matches!(result, Type::Data(_)) {
+                    return Err("scratch entry cannot return a temporary reference".into());
+                }
+                for (input, wanted) in supplied.iter().zip(parameters) {
+                    expect(expression(input, env, signatures, types)?, *wanted)?;
+                    if let Type::Data(id) = wanted {
+                        if data::find(types, *id)?.member_types().iter().any(|ty| matches!(ty, Type::Data(_))) {
+                            return Err("scratch inputs must be flat data without reference fields".into());
+                        }
+                    }
                 }
                 expect(expression(bytes, env, signatures, types)?, Type::I64)?;
                 return Ok(*result);
@@ -870,14 +878,15 @@ impl Machine<'_> {
                     return Ok(self.neural_status);
                 }
                 if matches!(name.as_str(), "sys.scratch" | "sys.read_only") {
-                    let [Expr::Name(target), bytes] = arguments.as_slice() else {
+                    let [Expr::Name(target), bytes, supplied @ ..] = arguments.as_slice() else {
                         return Err("invalid scratch entry".into());
                     };
-                    crate::effects::verify_scratch(target, self.definitions)?;
+                    crate::effects::verify_scratch(target, self.definitions, self.data_types)?;
                     if name == "sys.read_only" {
                         crate::access::verify_read_only(target, self.definitions, self.data_types)?;
                     }
                     let bytes = self.expr(bytes, env)?;
+                    let values = supplied.iter().map(|arg| self.expr(arg, env)).collect::<Result<Vec<_>>>()?;
                     let read_only_snapshot = if name == "sys.read_only" {
                         Some(self.arena.clone())
                     } else {
@@ -899,7 +908,7 @@ impl Machine<'_> {
                         external.begin_scope()?;
                     }
                     self.arena.limit = mark.1 + bytes as usize;
-                    let mut result = self.call(d.id, &[]);
+                    let mut result = self.call(d.id, &values);
                     if let Some(external) = self.external.as_mut() {
                         let finish = external.end_scope(result.is_ok(), name == "sys.read_only");
                         if result.is_ok() {

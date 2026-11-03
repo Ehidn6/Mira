@@ -1,0 +1,13 @@
+// The caller keeps the buffer; only the callback's temporary data is reclaimed.
+type ScratchValues = [i64,2]
+touch(values:ScratchValues,amount:i64)->i64 =
+  temporary = ScratchValues(90,91)
+  values[0] += amount
+  temporary[0] + values[0]
+run()->i64 =
+  values = ScratchValues(0,7)
+  for step in 0..1000
+    observed = sys.scratch(touch,64,values,1)
+  values[0] + values[1]
+space Main:
+  result = run()

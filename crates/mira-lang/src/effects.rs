@@ -246,7 +246,7 @@ pub(crate) fn verify_kernel(entry: Id, defs: &[CodeModule]) -> Result<()> {
 
 /// Scope-local aggregates can only reach fresh objects or flat persistent buffers.
 /// No raw aggregate views or aggregate return values may escape this boundary.
-pub(crate) fn verify_scratch(name: &str, defs: &[CodeModule]) -> Result<()> {
+pub(crate) fn verify_scratch(name: &str, defs: &[CodeModule], types: &[data::Definition]) -> Result<()> {
     fn expr(e: &Expr, defs: &[CodeModule], seen: &mut BTreeSet<Id>) -> Result<()> {
         match e {
             Expr::View(..) => return Err("scratch entries cannot create raw aggregate views; use scalar sys.load/store or persistent buffers".into()),
@@ -311,8 +311,15 @@ pub(crate) fn verify_scratch(name: &str, defs: &[CodeModule]) -> Result<()> {
         .iter()
         .find(|d| d.name == name)
         .ok_or("scratch entry missing")?;
-    if !d.parameters.is_empty() || matches!(d.output, Type::Data(_)) {
-        return Err("scratch entry cannot return a temporary reference or accept inputs".into());
+    if matches!(d.output, Type::Data(_)) {
+        return Err("scratch entry cannot return a temporary reference".into());
+    }
+    for parameter in &d.parameters {
+        if let Type::Data(id) = parameter.ty {
+            if data::find(types, id)?.member_types().iter().any(|ty| matches!(ty, Type::Data(_))) {
+                return Err("scratch inputs must be flat data without reference fields".into());
+            }
+        }
     }
     visit(d, defs, &mut BTreeSet::new())
 }

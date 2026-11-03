@@ -322,10 +322,10 @@ impl Emitter<'_> {
         self.code.emit(&[0x48, 0xc7, 0x07, 0, 0, 0, 0]);
     }
     fn scratch(&mut self, args: &[Expr], env: &mut BTreeMap<String, (usize, Type)>) -> Result<()> {
-        let [Expr::Name(target), bytes] = args else {
+        let [Expr::Name(target), bytes, supplied @ ..] = args else {
             return Err("invalid scratch entry".into());
         };
-        crate::effects::verify_scratch(target, self.definitions)?;
+        crate::effects::verify_scratch(target, self.definitions, self.data_types)?;
         let id = self
             .definitions
             .iter()
@@ -333,6 +333,14 @@ impl Emitter<'_> {
             .ok_or("scratch entry missing")?
             .id;
         self.expr(bytes, env)?;
+        let budget = self.slot();
+        self.store(budget);
+        // Caller arguments are evaluated before restricting or marking the region.
+        for argument in supplied {
+            self.expr(argument, env)?;
+            self.push_rax();
+        }
+        self.load(budget);
         self.code.emit(&[0x48, 0x85, 0xc0]);
         self.traps.invalid.push(self.code.jump(&[0x0f, 0x88]));
         self.code.emit(&[0x4c, 0x01, 0xe0]); // end = cursor + bytes
@@ -347,6 +355,10 @@ impl Emitter<'_> {
         self.code.u32((-(cursor as i32)) as u32);
         self.code.emit(&[0x48, 0x89, 0xc3]); // restrict the existing allocator
         self.calls.push((self.code.jump(&[0xe8]), id));
+        if !supplied.is_empty() {
+            self.code.emit(&[0x48, 0x81, 0xc4]);
+            self.code.u32((supplied.len() * 8) as u32);
+        }
         self.code.emit(&[0x4c, 0x8b, 0xa5]);
         self.code.u32((-(cursor as i32)) as u32);
         self.code.emit(&[0x48, 0x8b, 0x9d]);

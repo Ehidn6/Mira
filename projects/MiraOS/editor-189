@@ -171,6 +171,24 @@ editor @189 (value:i64)->unit =
     view_cache: i64
     view_count: i64
     view_next: i64
+    compile_requested: bool
+    compile_run: bool
+    compile_status: i64
+    compile_phase: i64
+    compile_revision: i64
+    compile_scope: i64
+    compile_offset: i64
+    compile_length: i64
+    compile_error: i64
+    compile_error_offset: i64
+    compile_workspace: i64
+    compile_address: i64
+    compile_size: i64
+    compile_entry: i64
+    compile_type: i64
+    compile_result: i64
+    compile_trap: i64
+
   document @165 ()->SourceDocument = SourceDocument.persist()
 
   start @166 (buffer:addr,history:SourceUndo)->unit =

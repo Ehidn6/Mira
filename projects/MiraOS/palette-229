@@ -39,21 +39,21 @@
       c.palette_selected = 0
     c.palette_dirty = true
 
-    name @222 (index:i64)->Text = index == 0 ? Text("layout workspace") : index == 1 ? Text("layout editor") : index == 2 ? Text("layout console") : index == 3 ? Text("source edit") : index == 4 ? Text("source save") : index == 5 ? Text("source check") : index == 6 ? Text("source error") : index == 7 ? Text("system status") : index == 8 ? Text("neural memory") : index == 9 ? Text("graph show") : index == 10 ? Text("graph outer") : index == 11 ? Text("graph next") : index == 12 ? Text("graph previous") : index == 13 ? Text("help") : index == 14 ? Text("source info") : index == 15 ? Text("keyboard status") : index == 16 ? Text("source selected") : index == 17 ? Text("source parent") : index == 18 ? Text("source project") : index == 19 ? Text("source children") : index == 20 ? Text("world toggle") : index == 21 ? Text("world change rules") : index == 22 ? Text("world report") : index == 23 ? Text("console input") : index >= 24 ? cells.parent.editor.parts.label(index - 24) : Text("")
+    name @222 (index:i64)->Text = index == 0 ? Text("layout workspace") : index == 1 ? Text("layout editor") : index == 2 ? Text("layout console") : index == 3 ? Text("source edit") : index == 4 ? Text("source save") : index == 5 ? Text("source check") : index == 6 ? Text("source error") : index == 7 ? Text("system status") : index == 8 ? Text("neural memory") : index == 9 ? Text("graph show") : index == 10 ? Text("graph outer") : index == 11 ? Text("graph next") : index == 12 ? Text("graph previous") : index == 13 ? Text("help") : index == 14 ? Text("source info") : index == 15 ? Text("keyboard status") : index == 16 ? Text("source selected") : index == 17 ? Text("source parent") : index == 18 ? Text("source project") : index == 19 ? Text("source children") : index == 20 ? Text("world toggle") : index == 21 ? Text("world change rules") : index == 22 ? Text("world report") : index == 23 ? Text("console input") : index == 24 ? Text("source compile") : index == 25 ? Text("source run") : index >= 26 ? cells.parent.editor.parts.label(index - 26) : Text("")
 
-    description @223 (index:i64)->Text = index == 0 ? Text("Source and graph; output opens only when needed") : index == 1 ? Text("Focus source editor; keep draft and cursor") : index == 2 ? Text("Focus console; keep source draft") : index == 3 ? Text("Edit current source draft") : index == 4 ? Text("Save draft to state disk; no compilation") : index == 5 ? Text("Check tokens and delimiters; not full typing") : index == 6 ? Text("Jump to the current source error") : index == 7 ? Text("Show neural and storage status") : index == 8 ? Text("Show saved experience") : index == 9 ? Text("Inspect current running Space") : index == 10 ? Text("Navigate to enclosing Space") : index == 11 or index == 12 ? Text("Change graph page") : index == 13 ? Text("Show keyboard and console help") : index == 14 ? Text("Show draft cursor and save status") : index == 15 ? Text("Show USB keyboard connection") : index == 16 ? Text("Open selected cell definition in this draft") : index == 17 ? Text("Open enclosing source object; preserve draft") : index == 18 ? Text("Open complete project for repair or overview") : index == 19 ? Text("List contained source objects") : index == 20 ? Text("Toggle the shared neural discovery experiment") : index == 21 ? Text("Change environment rules; keep weights and experience") : index == 22 ? Text("Show pre-observation predictions and errors") : index == 23 ? Text("Enter an event or :command without leaving the editor") : index >= 24 ? Text("Open this source object; edits stay in the same saved project") : Text("Run existing console action")
+    description @223 (index:i64)->Text = index == 0 ? Text("Source and graph; output opens only when needed") : index == 1 ? Text("Focus source editor; keep draft and cursor") : index == 2 ? Text("Focus console; keep source draft") : index == 3 ? Text("Edit current source draft") : index == 4 ? Text("Save draft to state disk; no compilation") : index == 5 ? Text("Check tokens and delimiters; not full typing") : index == 6 ? Text("Jump to the current source error") : index == 7 ? Text("Show neural and storage status") : index == 8 ? Text("Show saved experience") : index == 9 ? Text("Inspect current running Space") : index == 10 ? Text("Navigate to enclosing Space") : index == 11 or index == 12 ? Text("Change graph page") : index == 13 ? Text("Show keyboard and console help") : index == 14 ? Text("Show draft cursor and save status") : index == 15 ? Text("Show USB keyboard connection") : index == 16 ? Text("Open selected cell definition in this draft") : index == 17 ? Text("Open enclosing source object; preserve draft") : index == 18 ? Text("Open complete project for repair or overview") : index == 19 ? Text("List contained source objects") : index == 20 ? Text("Toggle the shared neural discovery experiment") : index == 21 ? Text("Change environment rules; keep weights and experience") : index == 22 ? Text("Show pre-observation predictions and errors") : index == 23 ? Text("Enter an event or :command without leaving the editor") : index == 24 ? Text("Compile the selected function; keep the running kernel unchanged") : index == 25 ? Text("Compile if needed and run with an operation/memory limit") : index >= 26 ? Text("Open this source object; edits stay in the same saved project") : Text("Run existing console action")
 
     match @224 (index:i64)->bool =
       c = cells.console()
       matched = 0
-      if index < 24
+      if index < 26
         name = palette.name(index)
         for position in 0..96
           if matched < c.palette_length and name[position] != 0 and name[position] == cells.query()[matched]
             matched += 1
       else
         // Search directly over source bytes; never allocate a Text per indexed object.
-        identity = cells.parent.editor.parts.get(index - 24,0)
+        identity = cells.parent.editor.parts.get(index - 26,0)
         for position in 0..12
           packed = position < 8 ? 0x6f20656372756f73 : 0x206e6570
           code = (packed >> ((position % 8) * 8)) & 255
@@ -69,8 +69,8 @@
           divisor /= 10
         if matched < c.palette_length and cells.query()[matched] == 32
           matched += 1
-        start = cells.parent.editor.parts.get(index - 24,5)
-        end = cells.parent.editor.parts.get(index - 24,6)
+        start = cells.parent.editor.parts.get(index - 26,5)
+        end = cells.parent.editor.parts.get(index - 26,6)
         for position in start..end
           code = cells.parent.editor.byte(position)
           if code >= 65 and code <= 90
@@ -80,7 +80,7 @@
       matched == c.palette_length
     count @225 ()->i64 =
       count = 0
-      for index in 0..24 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
+      for index in 0..26 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
         if match(index)
           count += 1
       count
@@ -88,7 +88,7 @@
     choice @226 ()->i64 =
       chosen = -1
       row = 0
-      for index in 0..24 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
+      for index in 0..26 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0)
         if match(index)
           if row == cells.console().palette_selected
             chosen = index
@@ -109,7 +109,7 @@
         c.frame_dirty = true
 
     execute @228 (index:i64)->unit =
-      if index >= -1 and index < 24 + cells.parent.editor.document().part_count
+      if index >= -1 and index < 26 + cells.parent.editor.document().part_count
         if index >= 0 and index < 3
           select(index)
         else if index == 17
@@ -131,8 +131,11 @@
         else if index == 23
           toggle()
           cells.console().palette_input = true
-        else if index >= 24
-          opened = cells.parent.editor.parts(cells.parent.editor.parts.get(index - 24,0))
+        else if index == 24 or index == 25
+          cells.parent.editor.document().compile_requested = true
+          cells.parent.editor.document().compile_run = index == 25
+        else if index >= 26
+          opened = cells.parent.editor.parts(cells.parent.editor.parts.get(index - 26,0))
         else
           // Preserve any half-written console line while using its existing dispatcher.
           state = cells.parent.neural.dynamics.state()
@@ -174,7 +177,7 @@
         end = cells.parent.display.text(cells.query(),left + 1,top + 2,white)
         first = (c.palette_selected / 5) * 5
         row = 0
-        for index in 0..(c.palette_input ? 0 : 24 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0))
+        for index in 0..(c.palette_input ? 0 : 26 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0))
           if match(index)
             if row >= first and row < first + 5
               line = top + 4 + (row - first) * 2

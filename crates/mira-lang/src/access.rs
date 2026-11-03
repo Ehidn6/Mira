@@ -131,8 +131,8 @@ impl Analysis<'_> {
                     .collect::<Result<Vec<_>>>()?;
                 if let Some(d) = self.defs.iter().find(|d| d.name == *target) {
                     let summary = self.known.get(&d.id).cloned().unwrap_or_default();
-                    // A scope has no input parameters; its byte limit is not an input.
-                    let actual = if scoped { &[][..] } else { origins.as_slice() };
+                    // The first evaluated scoped argument is its byte limit.
+                    let actual = if scoped { &origins[1..] } else { origins.as_slice() };
                     self.result
                         .written
                         .extend(substitute(&summary.written, actual));
@@ -244,7 +244,7 @@ pub(crate) fn verify_read_only(
     defs: &[CodeModule],
     types: &[data::Definition],
 ) -> Result<()> {
-    crate::effects::verify_scratch(name, defs)?;
+    crate::effects::verify_scratch(name, defs, types)?;
     let entry = defs
         .iter()
         .find(|d| d.name == name)

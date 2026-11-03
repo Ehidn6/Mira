@@ -273,7 +273,14 @@ impl<'a> Solver<'a> {
                             .cloned();
                     for (i, arg) in args.iter().enumerate().skip(1) {
                         let v = child(self, arg, i)?;
-                        self.allowed(v, &[Type::I64]);
+                        if name == "sys.scratch" && i >= 2 {
+                            if let Some((inputs, _)) = &signature {
+                                let wanted = *inputs.get(i - 2).ok_or("scratch: wrong input count")?;
+                                self.same(v, wanted);
+                            }
+                        } else {
+                            self.allowed(v, &[Type::I64]);
+                        }
                     }
                     if name == "sys.neural_try" {
                         if let Some((_, v)) = signature {

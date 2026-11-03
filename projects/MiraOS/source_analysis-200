@@ -6,6 +6,9 @@ source_analysis @200 ()->unit =
     sys.scratch(check_report,4096)
 
 
+  runner()
+
+  // Compile the selected editable definition using the existing Mira module API.
   type SourceDelimiters  @28 = [i64,256]
   selected_code @188 ()->unit =
     d = cells.parent.editor.document()

@@ -63,7 +63,7 @@ hardware @88 ()->unit =
               h.pool_base = start
         if best > 0
           // A pinned pool for early DMA and page tables; no general free/reclaim yet.
-          pages = best < 4096 ? best : 4096
+          pages = best < 8192 ? best : 8192
           h.pool_next = h.pool_base
           h.pool_end = h.pool_base + pages * 4096
         h.physical_bits = 36
@@ -76,7 +76,7 @@ hardware @88 ()->unit =
   physical_allocate @80 (pages:i64,alignment:i64)->i64 =
     h = cells.state()
     result = 0
-    if h.pool_next > 0 and pages > 0 and pages <= 4096 and alignment >= 4096 and alignment <= 2097152 and (alignment & (alignment - 1)) == 0
+    if h.pool_next > 0 and pages > 0 and pages <= 8192 and alignment >= 4096 and alignment <= 2097152 and (alignment & (alignment - 1)) == 0
       start = (h.pool_next + alignment - 1) & ~(alignment - 1)
       bytes = pages * 4096
       if start <= h.pool_end and bytes <= h.pool_end - start

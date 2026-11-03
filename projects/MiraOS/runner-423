@@ -1,0 +1,205 @@
+  runner @423 ()->unit =
+    d = cells.parent.editor.document()
+    if d.compile_requested
+      d.compile_requested = false
+      cached = d.compile_status == 2 and d.compile_revision == d.revision and d.compile_scope == d.scope_id
+      if cached and d.compile_run
+        invoke()
+      else
+        d.compile_status = 1
+        d.compile_phase = 0
+        d.compile_error = 0
+        d.compile_error_offset = 0
+        d.compile_trap = 0
+        d.compile_revision = d.revision
+        d.compile_scope = d.scope_id
+        d.compile_offset = d.scope_start
+        d.compile_length = d.scope_end - d.scope_start
+        d.compile_size = 0
+        if d.scope_id == reflect.root() or d.compile_length <= 0 or d.compile_length > 8192
+          d.compile_status = 3
+          d.compile_error = 13
+        else if d.compile_workspace == 0
+          bytes = ScalarSource.size_bytes() + ModuleSymbols.size_bytes() + ScalarParameters.size_bytes()
+          bytes += ScalarNodes.size_bytes() + ScalarBytes.size_bytes() * 2 + ScalarFixups.size_bytes() * 2
+          bytes += ModuleState.size_bytes() + ScalarWork.size_bytes() + LexBytes.size_bytes() + LexState.size_bytes()
+          d.compile_workspace = cells.parent.hardware.physical_allocate((bytes + 1048576 + 4095) / 4096,4096)
+          if d.compile_workspace == 0
+            d.compile_status = 3
+            d.compile_error = 14
+          else
+            d.compile_address = d.compile_workspace + bytes
+        cells.parent.workspace.console().console_open = true
+        cells.parent.workspace.console().frame_dirty = true
+        if d.compile_status != 1
+          sys.scratch(report,4096,0)
+        else
+          sys.scratch(report,4096,2)
+    if d.compile_status == 1
+      if d.compile_revision != d.revision or d.compile_scope != d.scope_id
+        d.compile_status = 3
+        d.compile_error = 15
+        sys.scratch(report,4096,0)
+      else
+        offset = d.compile_workspace
+        input = ScalarSource.at(sys.addr(offset))
+        offset += ScalarSource.size_bytes()
+        symbols = ModuleSymbols.at(sys.addr(offset))
+        offset += ModuleSymbols.size_bytes()
+        parameters = ScalarParameters.at(sys.addr(offset))
+        offset += ScalarParameters.size_bytes()
+        nodes = ScalarNodes.at(sys.addr(offset))
+        offset += ScalarNodes.size_bytes()
+        output = ScalarBytes.at(sys.addr(offset))
+        offset += ScalarBytes.size_bytes()
+        body = ScalarBytes.at(sys.addr(offset))
+        offset += ScalarBytes.size_bytes()
+        fixups = ScalarFixups.at(sys.addr(offset))
+        offset += ScalarFixups.size_bytes()
+        relocations = ScalarFixups.at(sys.addr(offset))
+        offset += ScalarFixups.size_bytes()
+        module = ModuleState.at(sys.addr(offset))
+        offset += ModuleState.size_bytes()
+        work = ScalarWork.at(sys.addr(offset))
+        offset += ScalarWork.size_bytes()
+        window = LexBytes.at(sys.addr(offset))
+        offset += LexBytes.size_bytes()
+        lexer_state = LexState.at(sys.addr(offset))
+        if d.compile_phase == 0
+          for index in 0..d.compile_length
+            input[index] = cells.parent.editor.byte(d.compile_offset + index)
+          // Snapshot bytes are separate from the mutable editor and running code.
+          module.length = d.compile_length
+        phase = d.compile_phase
+        checked = sys.scratch(step,350000,input,symbols,parameters,nodes,output,body,fixups,relocations,module,work,window,lexer_state,phase)
+        if module.error != 0
+          d.compile_status = 3
+          d.compile_error = module.error
+          d.compile_error_offset = module.error_offset
+          sys.scratch(report,4096,0)
+        else if phase == 0
+          d.compile_phase = 1
+        else if phase == 1 and module.phase == 3
+          d.compile_phase = 2
+        else if phase == 2 and module.emitted == module.count
+          d.compile_phase = 3
+        else if phase == 3
+          d.compile_size = module.size
+          d.compile_entry = module.entry
+          d.compile_type = symbols[1]
+          for index in 0..module.size
+            sys.store8(sys.addr(d.compile_address + index),output[index])
+          barrier = sys.cpuid_eax(0,0)
+          d.compile_status = 2
+          sys.scratch(report,4096,0)
+          if d.compile_run
+            invoke()
+
+    step @424 (input:ScalarSource,symbols:ModuleSymbols,parameters:ScalarParameters,nodes:ScalarNodes,output:ScalarBytes,body:ScalarBytes,fixups:ScalarFixups,relocations:ScalarFixups,module:ModuleState,work:ScalarWork,window:LexBytes,lexer_state:LexState,phase:i64)->i64 =
+      lexer = ScalarLexer(window,lexer_state)
+      literal = LiteralBytes()
+      value = LiteralValue()
+      if phase == 0
+        initialized = compiler.module_index_begin(input,module.length,0,module,symbols,work,lexer,literal,value,parameters)
+      else if phase == 1
+        indexed = compiler.module_index_step(input,module,symbols,work,lexer,literal,value,parameters)
+        if module.error == 0 and module.phase == 3
+          // The selected definition is the first function, including implicit IDs.
+          module.entry_id = symbols[19]
+          if symbols[2] != 0 or (symbols[1] != 1 and symbols[1] != 2 and symbols[1] != 4 and symbols[1] != 16)
+            compiler.module_fail(module,12,symbols[96])
+          if module.error == 0
+            compiler.module_prepare(module,symbols,parameters)
+      else if phase == 2
+        code = ScalarCode()
+        emitted = compiler.module_emit_next(input,module,symbols,parameters,work,lexer,literal,value,nodes,code,body,output,fixups,relocations)
+        // Apply this entry policy to every body, including unused nested helpers.
+        for index in 0..(module.error == 0 ? work.count : 0)
+          base = index * 6
+          operation = nodes[base + 2]
+          raw = nodes[base] == 21 and (operation <= 2 or operation >= 27)
+          if nodes[base + 5] == 8 or raw
+            compiler.module_fail(module,11,nodes[base + 4])
+      else if phase == 3
+        linked = compiler.module_link(module,symbols,output,relocations,100000)
+      module.error
+
+    invoke @425 ()->unit =
+      d = cells.parent.editor.document()
+      if d.compile_status == 2 and d.compile_revision == d.revision and d.compile_scope == d.scope_id
+        // Reuse the compilation window as the 17-word invocation context.
+        offset = ScalarSource.size_bytes() + ModuleSymbols.size_bytes() + ScalarParameters.size_bytes()
+        offset += ScalarNodes.size_bytes() + ScalarBytes.size_bytes() * 2 + ScalarFixups.size_bytes() * 2
+        offset += ModuleState.size_bytes() + ScalarWork.size_bytes()
+        context = sys.addr(d.compile_workspace + offset)
+        for index in 0..17
+          sys.store64(sys.offset(context,index * 8),0)
+        d.compile_result = sys.call_sysv64(sys.addr(d.compile_address + d.compile_entry),context)
+        d.compile_trap = sys.load64(sys.offset(context,128))
+        if d.compile_trap != 0
+          d.compile_status = 4
+        cells.parent.workspace.console().console_open = true
+        cells.parent.workspace.console().frame_dirty = true
+        sys.scratch(report,4096,1)
+
+    signed @426 (value:i64)->unit =
+      if value == -9223372036854775808
+        cells.parent.workspace.write(Text("-9223372036854775808"))
+      else
+        if value < 0
+          cells.parent.workspace.put(45)
+        cells.parent.workspace.number(value < 0 ? -value : value)
+
+    report @427 (kind:i64)->unit =
+      d = cells.parent.editor.document()
+      if kind == 2
+        cells.parent.workspace.write(Text("COMPILE: selected source; edits cancel this compilation.\n"))
+      else if kind == 1
+        if d.compile_trap == 0
+          cells.parent.workspace.write(Text("RUN result: "))
+          if d.compile_type == 2
+            cells.parent.workspace.write(d.compile_result == 0 ? Text("false") : Text("true"))
+          else if d.compile_type == 4
+            cells.parent.workspace.write(Text("unit"))
+          else if d.compile_type == 16
+            value = math.from_bits(d.compile_result)
+            if value < 0.0
+              cells.parent.workspace.put(45)
+            mantissa = value < 0.0 ? -value : value
+            exponent = 0
+            while mantissa >= 10.0
+              mantissa /= 10.0
+              exponent += 1
+            while mantissa > 0.0 and mantissa < 1.0
+              mantissa *= 10.0
+              exponent -= 1
+            cells.parent.workspace.fixed(mantissa)
+            cells.parent.workspace.put(101)
+            signed(exponent)
+          else
+            signed(d.compile_result)
+          cells.parent.workspace.put(10)
+        else
+          cells.parent.workspace.write(Text("RUN stopped: "))
+          message = d.compile_trap == 1 ? Text("integer/float overflow") : d.compile_trap == 2 ? Text("division by zero") : d.compile_trap == 4 ? Text("operation budget exhausted") : d.compile_trap == 5 ? Text("stack limit reached") : d.compile_trap == 6 ? Text("index outside object") : d.compile_trap == 7 ? Text("temporary memory limit reached") : Text("invalid operation")
+          cells.parent.workspace.write(message)
+          cells.parent.workspace.put(10)
+      else
+        if d.compile_status == 2
+          cells.parent.workspace.write(Text("COMPILE ready; source ID/bytes/code: "))
+          cells.parent.workspace.number(d.compile_scope)
+          cells.parent.workspace.put(47)
+          cells.parent.workspace.number(d.compile_length)
+          cells.parent.workspace.put(47)
+          cells.parent.workspace.number(d.compile_size)
+          cells.parent.workspace.write(Text(" | Alt+X source run\n"))
+        else
+          cells.parent.workspace.write(Text("COMPILE rejected: "))
+          message = d.compile_error == 11 ? Text("raw addresses and device access are disabled for trial execution") : d.compile_error == 12 ? Text("entry needs no inputs and an i64/f32/bool/unit result") : d.compile_error == 13 ? Text("open one function object, at most 8 KiB, instead of the complete project") : d.compile_error == 14 ? Text("not enough physical memory for compiler workspace") : d.compile_error == 15 ? Text("source or selection changed; compile the current object again") : d.compile_error == 10 ? Text("temporary object cannot leave its function") : d.compile_error == 6 ? Text("incompatible types or arguments") : d.compile_error == 2 ? Text("unknown name/type or unsupported language operation") : d.compile_error == 4 ? Text("compiler input/node/code limit exceeded") : Text("invalid syntax, literal or definition")
+          cells.parent.workspace.write(message)
+          cells.parent.workspace.write(Text("\nerror/absolute source byte: "))
+          cells.parent.workspace.number(d.compile_error)
+          cells.parent.workspace.put(47)
+          cells.parent.workspace.number(d.compile_offset + d.compile_error_offset)
+          cells.parent.workspace.put(10)
+
