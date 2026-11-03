@@ -679,6 +679,17 @@ impl Program {
             identity(&mut ids, ty.id)?;
         }
         definitions(&self.code_modules, &mut ids, 0)?;
+        for (_, definition) in code::symbols(&self.code_modules) {
+            if let Some(owner) = definition.owner {
+                let cell = self.root.find_cell(owner).ok_or("inline code owner missing")?;
+                if cell.definition != Definition::Code(definition.id) {
+                    return Err("inline code must be the behavior of its owning component".into());
+                }
+                let users = crate::inspect::cells(self).into_iter()
+                    .filter(|entry| matches!(entry.cell.definition, Definition::Code(id) | Definition::Adaptive(id) if id == definition.id)).count();
+                if users != 1 { return Err("inline behavior cannot be shared by another component; use an explicit shared definition".into()); }
+            }
+        }
         let types = self.data_types();
         fn check_type(ty: Type, types: &[data::Definition]) -> Result<()> {
             if let Type::Data(id) = ty {

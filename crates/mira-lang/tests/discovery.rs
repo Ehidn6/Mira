@@ -9,9 +9,12 @@ fn native_discovery_uses_shared_learning_and_records_predictions_before_results(
     let project = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../projects/MiraOS");
     let mut tree = source_tree::read(&project.canonicalize().unwrap()).unwrap();
     fn replace_boot(node: &mut source_tree::SourceElement) -> bool {
-        if node.id == 164 {
-            assert!(node.children.is_empty());
-            node.content = include_str!("fixtures/discovery-boot").into();
+        if node.id == 100 {
+            let fixture = include_str!("fixtures/discovery-boot");
+            let body = fixture.split_once('\n').unwrap().1;
+            node.content = "  kernel @100 = code @164 ()->unit =\n".to_owned()
+                + &body.lines().map(|line| format!("  {line}\n")).collect::<String>();
+            for child in &mut node.children { child.offset = node.content.len(); }
             return true;
         }
         node.children

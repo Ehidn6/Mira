@@ -230,6 +230,7 @@ pub(crate) fn lower(
             wrapper_name.push('_');
         }
         result.code_modules.push(CodeModule {
+            owner: None,
             id,
             name: wrapper_name,
             parameters,

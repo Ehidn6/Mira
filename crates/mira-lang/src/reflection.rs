@@ -411,6 +411,7 @@ pub(crate) fn lower(
     }
     Ok((
         CodeModule {
+            owner: None,
             id,
             name: label,
             parameters: (0..arity)

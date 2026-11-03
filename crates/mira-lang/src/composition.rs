@@ -724,6 +724,7 @@ impl Builder<'_> {
             })]
         };
         Ok(CodeModule {
+            owner: None,
             data_types: vec![],
             id,
             name: label(id),
@@ -914,6 +915,7 @@ fn compile_mode(
                 let id = b.entries[&cell];
                 host_entries.insert(id);
                 CodeModule {
+                    owner: None,
                     id,
                     name: label(id),
                     parameters: ports
@@ -954,6 +956,7 @@ fn compile_mode(
                     .ok_or("host graph missing")?;
                 host_entries.insert(id);
                 CodeModule {
+                    owner: None,
                     id,
                     name: label(id),
                     parameters: space.inputs.clone(),

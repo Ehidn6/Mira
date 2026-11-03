@@ -282,6 +282,7 @@ pub fn differentiate(
     )?;
     check_size(&dual.value, &dual.tangent)?;
     Ok(CodeModule {
+        owner: None,
         id: generated_id,
         name: label,
         parameters: module.parameters.clone(),

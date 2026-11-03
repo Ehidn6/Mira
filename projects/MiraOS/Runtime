@@ -1,9 +1,0 @@
-    space Runtime @101:
-      out rate: f32
-      base.out -> rate_value.value @248 
-      rate_value.out -> rate @249 
-// Compiler grammar component. Input is up to three packed UTF-8 bytes.
-// Output: precedence in bits 8..15, core operator tag in bits 0..7; -1 unknown.
-// Tags follow or,and,==,!=,<,<=,>,>=,|,^,&,<<,>>,+,-,*,/,%.
-      base @114 = cognition.rate_base()
-      rate_value @115 = cognition.half()

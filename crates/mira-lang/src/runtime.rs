@@ -481,6 +481,7 @@ pub fn execute_behavior_system(
             name.push('_');
         }
         program.code_modules.push(code::CodeModule {
+            owner: None,
             id: wrapper,
             name,
             parameters: vec![],

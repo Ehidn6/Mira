@@ -1,0 +1,11 @@
+// One component contains its own algorithm and its real Z graph.
+// No separate boot definition or empty organizational source object.
+identities 100
+space Main @1:
+  kernel @10 = code @11 ()->i64 =
+    cells.value() + adjust(1)
+
+    adjust @12 (x:i64)->i64 = x + 2
+
+    space Runtime @13:
+      value @14 = 7

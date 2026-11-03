@@ -27,9 +27,7 @@ def main():
     subprocess.run(['cargo', 'build', '--quiet', '--offline', '--release', '-p', 'mira-lang', '--bin', 'mira'], cwd=root, check=True)
     binary = root / 'target/release/mira'
     inputs = {'compiler': digest(binary)}
-    for path in sorted((root / 'projects/MiraOS').rglob('*')):
-        if path.is_file():
-            inputs[str(path.relative_to(root))] = digest(path)
+    inputs['projects/MiraOS'] = digest(root / 'projects/MiraOS')
     try:
         previous = json.loads(stamp.read_text())
         reusable = (previous.get('inputs') == inputs and

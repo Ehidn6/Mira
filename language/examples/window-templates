@@ -1,4 +1,4 @@
-// Runs in the same definition context as MiraOS/template_* (no second UI model).
+// Runs in the same definition context as MiraOS display/templates and kernel/Runtime/window_template (no second UI model).
 macro build_windows()->unit =
   ui = reflect.inner(reflect.cell_at(reflect.root(),0))
   prototype = reflect.cell_at(ui,0)

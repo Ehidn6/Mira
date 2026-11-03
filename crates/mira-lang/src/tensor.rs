@@ -891,6 +891,7 @@ fn build(op: &str, args: &[Type], types: &[data::Definition], id: Id) -> Result<
         _ => return Err("unknown tensor lowering".into()),
     };
     Ok(CodeModule {
+        owner: None,
         id,
         name: format!("#{id}"),
         parameters: args

@@ -109,6 +109,9 @@ pub struct Parameter {
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CodeModule {
+    /// Inline behavior belongs to this existing instance; it is not a separate
+    /// source file or globally shared prototype. Ordinary definitions have None.
+    pub owner: Option<Id>,
     pub data_types: Vec<crate::data::Definition>,
     pub id: Id,
     pub name: String,

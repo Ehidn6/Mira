@@ -1,0 +1,11 @@
+// project note
+identities 100
+helper(x:i64)->i64 = x + 1 // learning note
+space Main @1:
+  first @10 = helper():
+    space Inside @11:
+      value @12 = 9
+  second @20 = helper()
+  input @30 = 7
+  input.out -> first.x
+  input.out -> second.x

@@ -236,6 +236,7 @@ struct Parser<'a> {
     next: Id,
     pending: Vec<Pending>,
     constructors: Vec<(Id, Id, String)>,
+    owned_definitions: Vec<CodeModule>,
     adapters: BTreeSet<Id>,
     depth: usize,
     type_names: BTreeMap<String, Id>,
@@ -434,6 +435,11 @@ impl Parser<'_> {
         Ok(p)
     }
     fn behavior(&mut self) -> Result<CodeModule> {
+        let (definition, inner) = self.behavior_body(None)?;
+        if inner.is_some() { return Err(self.error("a Z space must belong to a component")); }
+        Ok(definition)
+    }
+    fn behavior_body(&mut self, owner: Option<Id>) -> Result<(CodeModule, Option<Space>)> {
         let first_token = self.at;
         let compile_time = self.peek() == "macro" && self.look(1) != "(";
         if compile_time {
@@ -441,6 +447,7 @@ impl Parser<'_> {
         }
         let name = self.name()?;
         let id = self.id()?;
+        let name = owner.map_or(name, |cell| format!("__body_{cell}"));
         self.expect("(")?;
         let mut parameters = Vec::new();
         if !self.eat(")") {
@@ -461,14 +468,15 @@ impl Parser<'_> {
         let output_ports = annotated && self.eat("ports");
         let output = if annotated { self.ty()? } else { Type::I64 };
         self.expect("=")?;
-        let (data_types, locals, body) = if self.peek() == "\n" {
-            self.module_body()?
+        let (data_types, locals, body, inner) = if self.peek() == "\n" {
+            self.module_body(owner.is_some())?
         } else {
             let e = self.expr(0)?;
             self.expect("\n")?;
-            (Vec::new(), Vec::new(), vec![Statement::Expr(e)])
+            (Vec::new(), Vec::new(), vec![Statement::Expr(e)], None)
         };
         let mut definition = CodeModule {
+            owner,
             data_types,
             id,
             name,
@@ -480,7 +488,7 @@ impl Parser<'_> {
             body,
             locals,
         };
-        if !self.seed_frontend && crate::bootstrap_scalar::eligible(&definition) {
+        if owner.is_none() && !self.seed_frontend && crate::bootstrap_scalar::eligible(&definition) {
             let first = &self.tokens[first_token];
             let offset = |line: usize| self.source.split_inclusive('\n').take(line.saturating_sub(1)).map(str::len).sum::<usize>();
             let start = offset(first.line) + first.column - 1;
@@ -496,7 +504,7 @@ impl Parser<'_> {
                 }
             }
         }
-        Ok(definition)
+        Ok((definition, inner))
     }
     fn definition_ahead(&self) -> bool {
         let mut i = if self.peek() == "macro" && self.look(1) != "(" {
@@ -534,7 +542,7 @@ impl Parser<'_> {
         }
         self.look(i) == "="
     }
-    fn module_body(&mut self) -> Result<(Vec<data::Definition>, Vec<CodeModule>, Vec<Statement>)> {
+    fn module_body(&mut self, owned: bool) -> Result<(Vec<data::Definition>, Vec<CodeModule>, Vec<Statement>, Option<Space>)> {
         self.expect("\n")?;
         self.expect("<indent>")?;
         self.depth += 1;
@@ -544,8 +552,13 @@ impl Parser<'_> {
         let mut data_types = Vec::new();
         let mut locals = Vec::new();
         let mut body = Vec::new();
+        let mut inner = None;
         while self.peek() != "<dedent>" && self.peek() != "<eof>" {
-            if matches!(self.peek(), "struct" | "type")
+            if owned && self.peek() == "space" {
+                if inner.is_some() { return Err(self.error("a component has one owned Z space")); }
+                inner = Some(self.space()?);
+                if self.peek() != "<dedent>" { return Err(self.error("place the owned Z space after the component algorithm")); }
+            } else if matches!(self.peek(), "struct" | "type")
                 && self.type_names.contains_key(self.look(1))
             {
                 data_types.push(self.data_definition()?);
@@ -560,7 +573,7 @@ impl Parser<'_> {
         if body.is_empty() {
             return Err(self.error("cell code requires an entry expression or algorithm"));
         }
-        Ok((data_types, locals, body))
+        Ok((data_types, locals, body, inner))
     }
     fn data_definition(&mut self) -> Result<data::Definition> {
         let kind = self.take()?;
@@ -1006,7 +1019,20 @@ impl Parser<'_> {
                 continue;
             }
             let id = self.id()?;
+            let n = s.cells.len();
+            let declared_position = self.position([(n % 3) as f32 * 3.5 - 3.5, (n / 3) as f32 * 3.5, 0.])?;
             self.expect("=")?;
+            if self.peek() == "code" && (self.look(1) == "@" || self.look(1) == "(") {
+                let (behavior, inner) = self.behavior_body(Some(id))?;
+                let definition = Definition::Code(behavior.id);
+                self.owned_definitions.push(behavior);
+                s.cells.push(Instance {
+                    id, name, definition, parameter: 0,
+                    position: declared_position,
+                    space: inner,
+                });
+                continue;
+            }
             let (definition, parameter) = if self.eat("+") {
                 (Definition::Add, self.signed()?)
             } else if self.eat("*") {
@@ -1095,8 +1121,7 @@ impl Parser<'_> {
                     }
                 }
             };
-            let n = s.cells.len();
-            let position = self.position([(n % 3) as f32 * 3.5 - 3.5, (n / 3) as f32 * 3.5, 0.])?;
+            let position = self.position(declared_position)?;
             let inner = if self.eat(":") {
                 self.expect("\n")?;
                 self.expect("<indent>")?;
@@ -1238,6 +1263,7 @@ fn parse_uncached_with_sites(source: &str, validate_code: bool, seed_frontend: b
         next: 1,
         pending: Vec::new(),
         constructors: Vec::new(),
+        owned_definitions: Vec::new(),
         adapters: BTreeSet::new(),
         depth: 0,
         type_names: BTreeMap::new(),
@@ -1345,6 +1371,7 @@ fn parse_uncached_with_sites(source: &str, validate_code: bool, seed_frontend: b
         }
         s
     };
+    behaviors.append(&mut p.owned_definitions);
     let mut program = Program {
         global_types,
         root,
@@ -1648,10 +1675,42 @@ pub(crate) fn source_layout(source: &str) -> Result<(Program, BTreeMap<Id, (usiz
     }) {
         return Err("source spans require materialized source declarations".into());
     }
+    let spans = declaration_spans(source, &tokens, false)?;
+    Ok((program, spans))
+}
+/// Bootstrap extracts the compiler declaration with the existing lexical layout
+/// rules before Mira's own scanner has been loaded. No stored offset table.
+pub(crate) fn source_spans_seed(source: &str) -> Result<BTreeMap<Id, (usize, usize)>> {
+    declaration_spans(source, &lex(source, true)?, true)
+}
+/// Human-facing source projection hides stable identity bookkeeping. The lexer
+/// protects comments, text literals and quoted identifiers from substitutions.
+pub(crate) fn display_source(source: &str) -> Result<String> {
+    let tokens = lex(source, true)?;
+    let offsets = source_line_offsets(source);
+    let mut ranges = Vec::new();
+    for pair in tokens.windows(2) {
+        if pair[0].text == "@" && pair[1].line == pair[0].line {
+            let start = offsets[pair[0].line - 1] + pair[0].column - 1;
+            let end = offsets[pair[1].line - 1] + pair[1].column - 1 + pair[1].text.len();
+            let start = if source.as_bytes().get(start.wrapping_sub(1)) == Some(&b' ') { start - 1 } else { start };
+            ranges.push((start,end));
+        } else if pair[0].text == "identities" && pair[0].column == 1 {
+            let start = offsets[pair[0].line - 1];
+            let end = offsets.get(pair[0].line).copied().unwrap_or(source.len());
+            ranges.push((start,end));
+        }
+    }
+    let mut result = source.to_owned();
+    for (start,end) in ranges.into_iter().rev() { result.replace_range(start..end, ""); }
+    Ok(result)
+}
+
+fn declaration_spans(source: &str, tokens: &[Token], seed_frontend: bool) -> Result<BTreeMap<Id, (usize, usize)>> {
     let offsets = source_line_offsets(source);
     let mut lines = Vec::new();
     let mut logical_line = Vec::new();
-    for token in &tokens {
+    for token in tokens {
         if token.text == "\n" {
             if !logical_line.is_empty() {
                 lines.push(std::mem::take(&mut logical_line));
@@ -1679,7 +1738,7 @@ pub(crate) fn source_layout(source: &str) -> Result<(Program, BTreeMap<Id, (usiz
             continue;
         }
         for pair in header.windows(2).filter(|pair| pair[0].text == "@") {
-            let id = natural_value(&pair[1].text, false)?;
+            let id = natural_value(&pair[1].text, seed_frontend)?;
             if spans
                 .insert(id, (offsets[line - 1], source.len()))
                 .is_some()
@@ -1689,7 +1748,7 @@ pub(crate) fn source_layout(source: &str) -> Result<(Program, BTreeMap<Id, (usiz
             open.push((indent, id));
         }
     }
-    Ok((program, spans))
+    Ok(spans)
 }
 
 fn is_float(token: &str) -> bool {

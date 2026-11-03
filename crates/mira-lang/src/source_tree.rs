@@ -1,6 +1,6 @@
 //! Recursive source storage. The assembled source is the only compiler input.
 use mira_core::{Id, Program, Result, Space, code::CodeModule};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, OpenOptions},
@@ -9,29 +9,23 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-pub const FORMAT: &str = "mira-source-index-v2";
 const SOURCE_LIMIT: usize = 4 * 1024 * 1024;
-const JSON_LIMIT: usize = 32 * 1024 * 1024;
 const NODE_LIMIT: usize = 65536;
 const DEPTH_LIMIT: usize = 64;
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceTree {
-    pub format: String,
     pub root: SourceElement,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceElement {
     pub id: Id,
     pub name: String,
     pub content: String,
     pub children: Vec<EmbeddedSource>,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EmbeddedSource {
     /// Byte offset in the parent's own content, before any children are inserted.
     pub offset: usize,
@@ -42,8 +36,17 @@ pub struct SourceEntry {
     pub parent: Option<Id>,
     pub id: Id,
     pub name: String,
+    /// Human-readable path through actual declaration/Z containment.
+    pub path: String,
     /// Byte size of this file with all its children assembled.
     pub size: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SourceView {
+    pub entry: SourceEntry,
+    pub source: String,
+    pub children: Vec<SourceEntry>,
 }
 
 type Topology = BTreeMap<Id, (String, Option<Id>)>;
@@ -61,12 +64,19 @@ fn topology(program: &Program) -> Result<Topology> {
         if depth > DEPTH_LIMIT {
             return Err("source nesting exceeds 64".into());
         }
-        add(out, module.id, &module.name, Some(parent))?;
+        let container = if let Some(owner) = module.owner {
+            // The inline implementation is part of the existing component,
+            // not another source object between it and its code.
+            owner
+        } else {
+            add(out, module.id, &module.name, Some(parent))?;
+            module.id
+        };
         for data in &module.data_types {
-            add(out, data.id, &data.name, Some(module.id))?;
+            add(out, data.id, &data.name, Some(container))?;
         }
         for local in &module.locals {
-            code(out, local, module.id, depth + 1)?;
+            code(out, local, container, depth + 1)?;
         }
         Ok(())
     }
@@ -92,6 +102,15 @@ fn topology(program: &Program) -> Result<Topology> {
         code(&mut out, module, program.root.id, 1)?;
     }
     Ok(out)
+}
+
+fn identities(program: &Program) -> Result<BTreeSet<Id>> {
+    let mut ids: BTreeSet<_> = topology(program)?.into_keys().collect();
+    for (_, definition) in mira_core::code::symbols(&program.code_modules) { ids.insert(definition.id); }
+    for entry in mira_core::inspect::spaces(program) {
+        for link in &entry.space.links { ids.insert(link.id); }
+    }
+    Ok(ids)
 }
 
 /// Pin identities without reformatting source, then project actual declaration scopes.
@@ -166,7 +185,6 @@ fn rebuild(source: &str) -> Result<(SourceTree, Program)> {
     }
     Ok((
         SourceTree {
-            format: FORMAT.into(),
             root: build(program.root.id, &source, &topology, &spans, 0)?,
         },
         program,
@@ -190,9 +208,6 @@ impl SourceTree {
         Ok(program)
     }
     pub fn assembled(&self) -> Result<String> {
-        if self.format != FORMAT {
-            return Err(format!("unsupported source tree format {}", self.format));
-        }
         let mut seen = BTreeSet::new();
         let mut bytes = 0;
         fn assemble(
@@ -255,33 +270,105 @@ impl SourceTree {
             .get(id)
             .ok_or_else(|| format!("unknown source identity {id}"))?;
         SourceTree {
-            format: FORMAT.into(),
             root: file.clone(),
         }
         .assembled()
     }
     pub fn list(&self) -> Result<Vec<SourceEntry>> {
         self.validate()?;
-        fn visit(file: &SourceElement, parent: Option<Id>, result: &mut Vec<SourceEntry>) -> usize {
+        Ok(self.entries())
+    }
+    pub(crate) fn entries(&self) -> Vec<SourceEntry> {
+        fn visit(file: &SourceElement, parent: Option<Id>, prefix: &str, result: &mut Vec<SourceEntry>) -> usize {
+            let path = format!("{prefix}/{}", file.name.replace('~', "~0").replace('/', "~1"));
             let index = result.len();
             result.push(SourceEntry {
                 parent,
                 id: file.id,
                 name: file.name.clone(),
+                path: path.clone(),
                 size: None,
             });
             let size = file.content.len()
                 + file
                     .children
                     .iter()
-                    .map(|child| visit(&child.element, Some(file.id), result))
+                    .map(|child| visit(&child.element, Some(file.id), &path, result))
                     .sum::<usize>();
             result[index].size = Some(size);
             size
         }
         let mut result = Vec::new();
-        visit(&self.root, None, &mut result);
-        Ok(result)
+        visit(&self.root, None, "", &mut result);
+        result
+    }
+    /// Paths traverse the same children as execution; bare names are accepted
+    /// only when unambiguous. Numeric IDs remain an internal/tooling address.
+    pub fn resolve(&self, selector: &str) -> Result<Id> {
+        let rows = self.entries();
+        if let Ok(id) = selector.parse::<Id>() {
+            return self.get(id).map(|_| id).ok_or("unknown source object".into());
+        }
+        let root_path = &rows[0].path;
+        let absolute = if selector.starts_with('/') {
+            selector.to_owned()
+        } else if selector == self.root.name || selector.starts_with(&format!("{}/", self.root.name)) {
+            format!("/{selector}")
+        } else {
+            format!("{root_path}/{selector}")
+        };
+        if let Some(row) = rows.iter().find(|row| row.path == absolute) {
+            return Ok(row.id);
+        }
+        let matches: Vec<_> = rows.iter().filter(|row| row.name == selector).collect();
+        match matches.as_slice() {
+            [row] => Ok(row.id),
+            [] => Err(format!("unknown source object {selector}")),
+            _ => Err(format!("ambiguous source name {selector}; enter its full path")),
+        }
+    }
+    /// Open just this object's own contents and immediate children. Text is an
+    /// inspection projection, not a second editable or executable source model.
+    pub fn enter(&self, selector: &str) -> Result<SourceView> {
+        self.assembled()?;
+        let id = self.resolve(selector)?;
+        let rows = self.entries();
+        let entry = rows.iter().find(|row| row.id == id).ok_or("source object missing")?.clone();
+        let element = self.get(id).ok_or("source object missing")?;
+        let mut source = String::new();
+        let mut previous = 0;
+        for child in &element.children {
+            source.push_str(&element.content[previous..child.offset]);
+            let indent = child.element.content.lines().find(|line| !line.trim().is_empty())
+                .map(|line| line.len() - line.trim_start().len()).unwrap_or(0);
+            source.push_str(&format!("{}// ↳ enter {}\n", " ".repeat(indent), child.element.name));
+            previous = child.offset;
+        }
+        source.push_str(&element.content[previous..]);
+        Ok(SourceView {
+            entry,
+            source: crate::frontend::display_source(&source)?,
+            children: rows.into_iter().filter(|row| row.parent == Some(id)).collect(),
+        })
+    }
+    /// Follow the existing cell -> code-definition relation. This is an edge
+    /// traversal, not new containment or a copied implementation per instance.
+    pub fn behavior(&self, selector: &str) -> Result<SourceView> {
+        let id = self.resolve(selector)?;
+        let program = self.validate()?;
+        let definition = if mira_core::code::find(&program.code_modules, id).is_some() {
+            id
+        } else if let Some(cell) = program.root.find_cell(id) {
+            match cell.definition {
+                mira_core::Definition::Code(code) | mira_core::Definition::Adaptive(code) => code,
+                mira_core::Definition::Graph => return Err("this component's behavior is its Z graph; use enter".into()),
+                _ => return Err("this component is a primitive; its value/composition is shown by enter".into()),
+            }
+        } else {
+            return Err("this object has no separate code behavior; use enter for its composition".into());
+        };
+        let body = mira_core::code::find(&program.code_modules, definition).ok_or("behavior missing")?;
+        self.enter(&body.owner.unwrap_or(definition).to_string())
     }
     /// Stage a full source splice and reparse; failure leaves this tree unchanged.
     pub fn replace(&mut self, id: Id, replacement: &str) -> Result<()> {
@@ -305,10 +392,10 @@ impl SourceTree {
         source.replace_range(range.0..range.1, &replacement);
         source = retain_high_water(&source, old_program.next_identity)?;
         let staged = from_source(&source)?;
-        let old_ids = topology(&old_program)?;
+        let old_ids = identities(&old_program)?;
         let new_program = staged.validate()?;
-        for id in topology(&new_program)?.keys() {
-            if !old_ids.contains_key(id) && *id < old_program.next_identity {
+        for id in &identities(&new_program)? {
+            if !old_ids.contains(id) && *id < old_program.next_identity {
                 return Err("replacement reused an identity below the high-water mark".into());
             }
         }
@@ -443,44 +530,6 @@ fn checked_path(path: &Path) -> Result<PathBuf> {
     }
     Ok(path)
 }
-// Bound nesting before deserialization, allowing valid recursive Z trees
-// beyond serde_json's default 128 JSON containers without unbounded recursion.
-fn decode_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    let mut depth = 0usize;
-    let mut string = false;
-    let mut escaped = false;
-    for byte in bytes {
-        if string {
-            if escaped {
-                escaped = false;
-            } else if *byte == b'\\' {
-                escaped = true;
-            } else if *byte == b'"' {
-                string = false;
-            }
-        } else {
-            match *byte {
-                b'"' => string = true,
-                b'{' | b'[' => {
-                    depth += 1;
-                    if depth > DEPTH_LIMIT * 4 + 16 {
-                        return Err("source JSON nesting budget exceeded".into());
-                    }
-                }
-                b'}' | b']' => {
-                    depth = depth.checked_sub(1).ok_or("invalid source JSON nesting")?;
-                }
-                _ => {}
-            }
-        }
-    }
-    let mut decoder = serde_json::Deserializer::from_slice(bytes);
-    decoder.disable_recursion_limit();
-    let tree = T::deserialize(&mut decoder).map_err(|e| e.to_string())?;
-    decoder.end().map_err(|e| e.to_string())?;
-    Ok(tree)
-}
-
 fn read_bytes(path: &Path, limit: usize) -> Result<Vec<u8>> {
     let path = checked_path(path)?;
     if !fs::metadata(&path).map_err(|e| e.to_string())?.is_file() {
@@ -520,303 +569,34 @@ fn create_file(path: &Path, bytes: &[u8]) -> Result<()> {
         .map_err(|e| e.to_string())
 }
 
-// Physical packing is independent of Program/Z identities. No file-kind tag.
-const LAYOUT: &str = "mira-source-layout-v3";
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Layout {
-    format: String,
-    tree: SourceTree,
-    files: Vec<SourceFile>,
+// Source code itself is the recursive container: declarations and Z blocks
+// determine containment. SourceTree is only an in-memory view of that syntax.
+pub(crate) fn read_storage(path: &Path) -> Result<SourceTree> {
+    from_source(&draft_source(path)?)
 }
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SourceFile {
-    content: String,
-    name: String,
-    ranges: Vec<Range>,
+/// Stage zero extracts the real compiler declaration using the same lexical
+/// declaration boundaries. No JSON, offset index or second compiler source.
+pub(crate) fn embedded_selected(container: &str, id: Id) -> Result<String> {
+    let spans = crate::frontend::source_spans_seed(container)?;
+    let &(start, end) = spans.get(&id).ok_or("unknown embedded source object")?;
+    Ok(container[start..end].into())
 }
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Range {
-    id: Id,
-    offset: usize,
-    length: usize,
+fn selected(tree: &SourceTree, id: Id) -> Result<String> {
+    let element = tree.get(id).ok_or("unknown source object")?.clone();
+    SourceTree { root: element }.assembled()
 }
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SourceGroup {
-    pub name: String,
-    pub ids: Vec<Id>,
-}
-type Locations = BTreeMap<Id, (usize, usize, usize)>;
-
-fn locations(layout: &Layout) -> Result<Locations> {
-    if layout.format != LAYOUT || layout.tree.format != FORMAT {
-        return Err("unsupported source layout".into());
-    }
-    let mut names = BTreeSet::new();
-    let mut result = BTreeMap::new();
-    let mut total = 0usize;
-    for (index, part) in layout.files.iter().enumerate() {
-        if part.name.is_empty()
-            || part.name.len() > 64
-            || part.name == "index"
-            || !part
-                .name
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
-            || !names.insert(&part.name)
-        {
-            return Err("invalid or duplicate source part name".into());
-        }
-        let mut end = 0;
-        for range in &part.ranges {
-            if range.offset != end
-                || result
-                    .insert(range.id, (index, range.offset, range.length))
-                    .is_some()
-            {
-                return Err("overlapping or duplicate source range".into());
-            }
-            end = end
-                .checked_add(range.length)
-                .ok_or("source size overflow")?;
-        }
-        total = total.checked_add(end).ok_or("source size overflow")?;
-        if total > SOURCE_LIMIT {
-            return Err("source byte budget exceeded".into());
-        }
-    }
-    fn shape(
-        file: &SourceElement,
-        locations: &Locations,
-        seen: &mut BTreeSet<Id>,
-        depth: usize,
-    ) -> Result<()> {
-        if depth > DEPTH_LIMIT
-            || seen.len() >= NODE_LIMIT
-            || file.id == 0
-            || !seen.insert(file.id)
-            || !file.content.is_empty()
-        {
-            return Err("invalid source index identity/depth/content".into());
-        }
-        let length = locations.get(&file.id).ok_or("source range missing")?.2;
-        let mut previous = 0;
-        for child in &file.children {
-            if child.offset < previous || child.offset > length {
-                return Err("invalid source child offset".into());
-            }
-            previous = child.offset;
-            shape(&child.element, locations, seen, depth + 1)?;
-        }
-        Ok(())
-    }
-    let mut seen = BTreeSet::new();
-    shape(&layout.tree.root, &result, &mut seen, 0)?;
-    if seen.len() != result.len() {
-        return Err("source layout contains unknown identities".into());
-    }
-    Ok(result)
-}
-fn source_layout(path: &Path) -> Result<(Layout, Locations)> {
-    let expanded = path.is_dir();
-    let layout: Layout = decode_json(&read_bytes(
-        &if expanded {
-            path.join("index")
-        } else {
-            path.to_path_buf()
-        },
-        JSON_LIMIT,
-    )?)?;
-    let locations = locations(&layout)?;
-    for file in &layout.files {
-        let expected = file.ranges.last().map_or(0, |r| r.offset + r.length);
-        if expanded {
-            if !file.content.is_empty() {
-                return Err("directory index duplicates file content".into());
-            }
-        } else if file.content.len() != expected {
-            return Err("contained source file length mismatch".into());
-        }
-    }
-    Ok((layout, locations))
-}
-fn hydrate_part(
-    file: &mut SourceElement,
-    parts: &[SourceFile],
-    locations: &Locations,
-    cache: &mut BTreeMap<usize, Vec<u8>>,
-    read: &impl Fn(&SourceFile, usize) -> Result<Vec<u8>>,
-) -> Result<()> {
-    let &(part, start, length) = locations.get(&file.id).ok_or("source range missing")?;
-    if !cache.contains_key(&part) {
-        let last = parts[part].ranges.last().ok_or("empty source part")?;
-        let expected = last.offset + last.length;
-        let bytes = read(&parts[part], expected)?;
-        if bytes.len() != expected {
-            return Err("source part length changed outside a validated edit".into());
-        }
-        cache.insert(part, bytes);
-    }
-    let bytes = &cache[&part][start..start + length];
-    file.content = std::str::from_utf8(bytes)
-        .map_err(|e| e.to_string())?
-        .into();
-    for child in &mut file.children {
-        hydrate_part(&mut child.element, parts, locations, cache, read)?;
-    }
-    Ok(())
-}
-fn read_source_part(path: &Path, part: &SourceFile, expected: usize) -> Result<Vec<u8>> {
-    if path.is_dir() {
-        read_bytes(&path.join(&part.name), expected)
-    } else {
-        Ok(part.content.as_bytes().to_vec())
-    }
-}
-/// Stage zero embeds selected canonical parts, using the same index and assembler
-/// as source navigation. The executable does not require a checkout at runtime.
-pub(crate) fn embedded_selected(index: &str, parts: &[(&str, &str)], id: Id) -> Result<String> {
-    let layout: Layout = decode_json(index.as_bytes())?;
-    let locations = locations(&layout)?;
-    let mut element = layout.tree.get(id)
-        .ok_or("unknown embedded source identity")?.clone();
-    hydrate_part(
-        &mut element,
-        &layout.files,
-        &locations,
-        &mut BTreeMap::new(),
-        &|part, _| {
-            parts.iter().find(|(name, _)| *name == part.name)
-                .map(|(_, source)| source.as_bytes().to_vec())
-                .ok_or_else(|| format!("missing embedded source part {}", part.name))
-        },
-    )?;
-    SourceTree { format: FORMAT.into(), root: element }.assembled()
-}
-/// Metadata only. Source bodies are not opened for catalog queries.
+/// Structural navigation needs no compiler run and never creates another tree.
 pub fn catalog(path: &Path) -> Result<Vec<SourceEntry>> {
-    let path = checked_path(path)?;
-    let (layout, locations) = source_layout(&path)?;
-    let tree = layout.tree;
-    let lengths = Some(locations);
-    fn walk(
-        file: &SourceElement,
-        parent: Option<Id>,
-        lengths: &Option<Locations>,
-        out: &mut Vec<SourceEntry>,
-    ) -> usize {
-        let index = out.len();
-        out.push(SourceEntry {
-            parent,
-            id: file.id,
-            name: file.name.clone(),
-            size: None,
-        });
-        let own = lengths
-            .as_ref()
-            .map_or(file.content.len(), |map| map[&file.id].2);
-        let length = own
-            + file
-                .children
-                .iter()
-                .map(|child| walk(&child.element, Some(file.id), lengths, out))
-                .sum::<usize>();
-        out[index].size = Some(length);
-        length
-    }
-    let mut out = Vec::new();
-    walk(&tree.root, None, &lengths, &mut out);
-    Ok(out)
-}
-pub fn source_files(path: &Path) -> Result<Vec<SourceGroup>> {
-    let (layout, _) = source_layout(&checked_path(path)?)?;
-    Ok(layout
-        .files
-        .into_iter()
-        .map(|file| SourceGroup {
-            name: file.name,
-            ids: file.ranges.into_iter().map(|r| r.id).collect(),
-        })
-        .collect())
-}
-pub fn read_file(path: &Path, name: &str) -> Result<String> {
-    let path = checked_path(path)?;
-    let (layout, _) = source_layout(&path)?;
-    let file = layout
-        .files
-        .iter()
-        .find(|file| file.name == name)
-        .ok_or("unknown source file")?;
-    let expected = file.ranges.last().map_or(0, |r| r.offset + r.length);
-    let bytes = if path.is_dir() {
-        read_bytes(&path.join(name), expected)?
-    } else {
-        file.content.as_bytes().to_vec()
-    };
-    if bytes.len() != expected {
-        return Err("source file length mismatch".into());
-    }
-    String::from_utf8(bytes).map_err(|e| e.to_string())
+    let tree = read_storage(path)?;
+    Ok(tree.entries())
 }
 pub fn read_selected(path: &Path, id: Id) -> Result<String> {
-    let path = checked_path(path)?;
-    let (layout, locations) = source_layout(&path)?;
-    let mut element = layout
-        .tree
-        .get(id)
-        .ok_or("unknown source identity")?
-        .clone();
-    hydrate_part(
-        &mut element,
-        &layout.files,
-        &locations,
-        &mut BTreeMap::new(),
-        &|part, expected| read_source_part(&path, part, expected),
-    )?;
-    SourceTree {
-        format: FORMAT.into(),
-        root: element,
-    }
-    .assembled()
+    selected(&read_storage(path)?, id)
 }
-fn read_storage(path: &Path) -> Result<SourceTree> {
-    let path = checked_path(path)?;
-    let (mut layout, locations) = source_layout(&path)?;
-    if path.is_dir() {
-        let allowed: BTreeSet<_> = layout
-            .files
-            .iter()
-            .map(|file| file.name.as_str())
-            .chain(std::iter::once("index"))
-            .collect();
-        for entry in fs::read_dir(&path).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            if !entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| allowed.contains(name))
-            {
-                return Err("unexpected source storage entry".into());
-            }
-            checked_path(&entry.path())?;
-        }
-    }
-    hydrate_part(
-        &mut layout.tree.root,
-        &layout.files,
-        &locations,
-        &mut BTreeMap::new(),
-        &|part, expected| read_source_part(&path, part, expected),
-    )?;
-    Ok(layout.tree)
-}
-/// Read the same authoritative storage for incomplete-code analysis. Storage
-/// limits/hashes still apply; semantic completeness is deliberately checked later.
+/// Incomplete-code analysis uses the same contained contents; semantic checks
+/// remain the responsibility of the draft checker.
 pub fn draft_source(path: &Path) -> Result<String> {
-    read_storage(path)?.assembled()
+    String::from_utf8(read_bytes(path, SOURCE_LIMIT)?).map_err(|e| e.to_string())
 }
 pub fn open(path: &Path) -> Result<(SourceTree, Program)> {
     let tree = read_storage(path)?;
@@ -829,210 +609,31 @@ pub fn read(path: &Path) -> Result<SourceTree> {
 pub fn source(path: &Path) -> Result<String> {
     read(path)?.assembled()
 }
-
-/// Source boundaries follow existing composition, never line counts or leaf IDs.
-/// A container with several children starts a contained file. Leaves and
-/// single-child headers stay with their nearest containing file.
-pub fn composition_groups(tree: &SourceTree) -> Vec<SourceGroup> {
-    fn visit(element: &SourceElement, parent: usize, root: bool, out: &mut Vec<SourceGroup>) {
-        let group = if root || element.children.len() > 1 {
-            let name = if root { "program".into() } else { format!("{}-{}", element.name, element.id) };
-            out.push(SourceGroup { name, ids: Vec::new() });
-            out.len() - 1
-        } else { parent };
-        out[group].ids.push(element.id);
-        for child in &element.children {
-            visit(&child.element, group, false, out);
-        }
-    }
-    let mut out = Vec::new();
-    visit(&tree.root, 0, true, &mut out);
-    out
-}
-fn default_groups(tree: &SourceTree) -> Vec<SourceGroup> {
-    composition_groups(tree)
-}
-fn inherited_groups(tree: &SourceTree, previous: &Layout) -> Vec<SourceGroup> {
-    let mut out: Vec<_> = previous
-        .files
-        .iter()
-        .map(|part| SourceGroup {
-            name: part.name.clone(),
-            ids: Vec::new(),
-        })
-        .collect();
-    let assignments: BTreeMap<_, _> = previous
-        .files
-        .iter()
-        .enumerate()
-        .flat_map(|(index, part)| part.ranges.iter().map(move |r| (r.id, index)))
-        .collect();
-    fn visit(
-        file: &SourceElement,
-        parent: usize,
-        map: &BTreeMap<Id, usize>,
-        out: &mut [SourceGroup],
-    ) {
-        let group = map.get(&file.id).copied().unwrap_or(parent);
-        out[group].ids.push(file.id);
-        for child in &file.children {
-            visit(&child.element, group, map, out);
-        }
-    }
-    if out.is_empty() {
-        return default_groups(tree);
-    }
-    visit(&tree.root, 0, &assignments, &mut out);
-    out.retain(|group| !group.ids.is_empty());
-    out
-}
-fn packing(tree: &SourceTree, groups: &[SourceGroup]) -> Result<(Layout, Vec<Vec<u8>>)> {
-    let mut layout = Layout {
-        format: LAYOUT.into(),
-        tree: tree.clone(),
-        files: Vec::new(),
-    };
-    let mut blobs = Vec::new();
-    for group in groups {
-        let mut blob = Vec::new();
-        let mut ranges = Vec::new();
-        for id in &group.ids {
-            let file = tree
-                .get(*id)
-                .ok_or("unknown source identity in physical group")?;
-            ranges.push(Range {
-                id: *id,
-                offset: blob.len(),
-                length: file.content.len(),
-            });
-            blob.extend_from_slice(file.content.as_bytes());
-        }
-        layout.files.push(SourceFile {
-            content: String::new(),
-            name: group.name.clone(),
-            ranges,
-        });
-        blobs.push(blob);
-    }
-    fn clear(file: &mut SourceElement) {
-        file.content.clear();
-        for child in &mut file.children {
-            clear(&mut child.element);
-        }
-    }
-    clear(&mut layout.tree.root);
-    locations(&layout)?;
-    Ok((layout, blobs))
-}
-
+/// Publish the complete recursive object atomically. Editing containment is
+/// editing Program/Z containment; a physical regroup operation does not exist.
 pub fn write(path: &Path, tree: &SourceTree) -> Result<()> {
-    if path.is_dir() {
-        return write_expanded(path, tree);
-    }
-    let groups = if path.exists() {
-        inherited_groups(tree, &source_layout(&checked_path(path)?)?.0)
-    } else {
-        default_groups(tree)
-    };
-    write_packed(path, tree, &groups)
-}
-pub fn write_packed(path: &Path, tree: &SourceTree, groups: &[SourceGroup]) -> Result<()> {
     tree.validate()?;
     let path = checked_path(path)?;
-    let (mut layout, blobs) = packing(tree, groups)?;
-    for (file, blob) in layout.files.iter_mut().zip(blobs) {
-        file.content = String::from_utf8(blob).map_err(|e| e.to_string())?;
+    if path.exists() {
+        read_storage(&path)?; // Never overwrite an unrelated file or directory.
     }
-    let bytes = serde_json::to_vec_pretty(&layout).map_err(|e| e.to_string())?;
-    if bytes.len() > JSON_LIMIT {
+    let bytes = tree.assembled()?.into_bytes();
+    if bytes.len() > SOURCE_LIMIT {
         return Err("source storage byte budget exceeded".into());
     }
     let temporary = sibling(&path, "saving")?;
     let result = (|| {
         create_file(&temporary, &bytes)?;
         if read_storage(&temporary)? != *tree {
-            return Err("packed source changed contents".into());
+            return Err("recursive source publication changed contents".into());
         }
         checked_path(&path)?;
-        fs::rename(&temporary, &path).map_err(|e| e.to_string())
+        fs::rename(&temporary, &path).map_err(|e| e.to_string())?;
+        fs::File::open(path.parent().ok_or("destination has no parent")?)
+            .and_then(|f| f.sync_all()).map_err(|e| e.to_string())
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
-    }
-    result
-}
-
-pub fn write_expanded(path: &Path, tree: &SourceTree) -> Result<()> {
-    let groups = if path.is_dir() {
-        inherited_groups(tree, &source_layout(&checked_path(path)?)?.0)
-    } else {
-        default_groups(tree)
-    };
-    write_grouped(path, tree, &groups)
-}
-
-/// Publish grouped byte storage. Logical files/identities/Z topology do not change.
-pub fn write_grouped(path: &Path, tree: &SourceTree, groups: &[SourceGroup]) -> Result<()> {
-    tree.validate()?;
-    let path = checked_path(path)?;
-    if path.exists() {
-        read(&path)?;
-        if !path.is_dir() {
-            return Err("expanded destination must be a directory".into());
-        }
-    }
-    let (layout, blobs) = packing(tree, groups)?;
-    let temporary = sibling(&path, "saving")?;
-    fs::create_dir(&temporary).map_err(|e| e.to_string())?;
-    let result = (|| {
-        for (part, blob) in layout.files.iter().zip(&blobs) {
-            create_file(&temporary.join(&part.name), blob)?;
-        }
-        create_file(
-            &temporary.join("index"),
-            &serde_json::to_vec_pretty(&layout).map_err(|e| e.to_string())?,
-        )?;
-        if read_storage(&temporary)? != *tree {
-            return Err("physical source packing changed contents".into());
-        }
-        checked_path(&path)?;
-        if !path.exists() {
-            return fs::rename(&temporary, &path).map_err(|e| e.to_string());
-        }
-        #[cfg(target_os = "linux")]
-        {
-            use std::{ffi::CString, os::unix::ffi::OsStrExt};
-            unsafe extern "C" {
-                fn renameat2(
-                    oldfd: i32,
-                    old: *const std::ffi::c_char,
-                    newfd: i32,
-                    new: *const std::ffi::c_char,
-                    flags: u32,
-                ) -> i32;
-            }
-            let old = CString::new(temporary.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
-            let new = CString::new(path.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
-            // RENAME_EXCHANGE publishes a complete tree in one filesystem operation.
-            if unsafe { renameat2(-100, old.as_ptr(), -100, new.as_ptr(), 2) } != 0 {
-                return Err(format!(
-                    "atomic source publication failed: {}",
-                    std::io::Error::last_os_error()
-                ));
-            }
-            if let Some(parent) = path.parent() {
-                fs::File::open(parent)
-                    .and_then(|f| f.sync_all())
-                    .map_err(|e| e.to_string())?;
-            }
-            let _ = fs::remove_dir_all(&temporary);
-        }
-        #[cfg(not(target_os = "linux"))]
-        return Err("atomic replacement of expanded source is currently supported on Linux".into());
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_dir_all(&temporary);
     }
     result
 }

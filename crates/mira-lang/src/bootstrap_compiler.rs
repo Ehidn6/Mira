@@ -14,33 +14,7 @@ pub(crate) fn library() -> Result<&'static Library> {
     LIBRARY
         .get_or_init(|| {
             let source = crate::source_tree::embedded_selected(
-                include_str!("../../../projects/MiraOS/index"),
-                &[
-                    (
-                        "compiler-lexer",
-                        include_str!("../../../projects/MiraOS/compiler-lexer"),
-                    ),
-                    (
-                        "compiler-parser",
-                        include_str!("../../../projects/MiraOS/compiler-parser"),
-                    ),
-                    (
-                        "compiler-types",
-                        include_str!("../../../projects/MiraOS/compiler-types"),
-                    ),
-                    (
-                        "compiler-x86",
-                        include_str!("../../../projects/MiraOS/compiler-x86"),
-                    ),
-                    (
-                        "compiler-module",
-                        include_str!("../../../projects/MiraOS/compiler-module"),
-                    ),
-                    (
-                        "compiler-data",
-                        include_str!("../../../projects/MiraOS/compiler-data"),
-                    ),
-                ],
+                include_str!("../../../projects/MiraOS"),
                 258,
             )?;
             let canonical_source = source.clone();

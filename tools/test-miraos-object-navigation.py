@@ -17,7 +17,7 @@ root = Path(__file__).resolve().parents[1]
 source = sys.argv[1] if len(sys.argv) > 1 else 'projects/MiraOS'
 if '--prepared' not in sys.argv:
     subprocess.run(['target/debug/mira','build-uefi',source,'target/miraos/object-navigation-test-esp'],cwd=root,check=True,timeout=180)
-image = root / os.environ.get('MIRA_TEST_ESP', 'target/miraos/object-navigation-test-esp')
+image = root / os.environ.get('MIRA_TEST_ESP', 'target/miraos/esp' if '--prepared' in sys.argv else 'target/miraos/object-navigation-test-esp')
 out = root / 'target/miraos/smoke'
 out.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
@@ -179,9 +179,9 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         return report(start)
 
     def graph_counts():
-        start = console_command('g', b'space ID/cells/links:')
+        start = console_command('g', b'cells/links:')
         wait(b'ready> ', start, 8)
-        found = re.search(rb'space ID/cells/links: (\d+)/(\d+)/(\d+)', transcript[start:])
+        found = re.search(rb'cells/links: (\d+)/(\d+)', transcript[start:])
         assert found, 'Missing live graph counts'
         return tuple(map(int, found.groups()))
 
@@ -310,7 +310,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             # The enabled experiment adds three lines. Its former footer must
             # disappear when the shorter view replaces it without a full clear.
             assert not any(crop(shorter, left, 30 * 16, left + 60 * 8, 31 * 16)), 'Shorter overview left stale text below its footer'
-            start = action('source open 231')
+            start = action('source open workspace/frame/layout')
             wait(b'SOURCE:', start, 15)
             press('ctrl', 'e')
             type_text(' ')
@@ -564,7 +564,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
                 press('ret')
                 return start
 
-            start = action('source open 231')
+            start = action('source open workspace/frame/layout')
             wait(b'SOURCE:',start,15)
 
             def replace_object(body, result_type='i64'):
@@ -632,7 +632,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             hidden = capture('workspace-output-dismissed')
             assert crop(hidden,boundary,lower,boundary+1,lower+1) == border
             press('alt','x')
-            type_text('source open 327')
+            type_text('source open compiler/scalar_parse_from')
             press('ret')
             wait(b'SOURCE:', start, 15)
             start = len(transcript)
@@ -647,7 +647,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             type_text(':d')
             press('ret')
             wait(b'source line:', start, 8)
-            found = re.search(rb'source bytes/cursor/revision/dirty/full/rejected: (\d+)/(\d+)/(\d+)/(\d+)/(\d+)/(\d+)', transcript[start:])
+            found = re.search(rb'source bytes/cursor/revision/dirty/full/rejected: (\d+)/(\d+)/(\d+)/(\d+)/(\d+)', transcript[start:])
             assert found and tuple(map(int,found.groups())) == before, 'Palette input changed editor context'
             capture('editor-output-on-demand')
             press('esc')
@@ -684,6 +684,29 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             press('ret')
             wait(b'SOURCE:',start,15)
 
+        # A component's own code and Z are in the same source object.
+        palette('source open kernel')
+        _, kernel_line = inspect_document()
+        (_, _), kernel_scope = info()
+        assert kernel_scope[:2] == (100,1), kernel_scope
+        assert b'kernel @100' in kernel_line and b'code @164' in kernel_line, kernel_line
+        palette('source open kernel/Runtime')
+        inspect_document()
+        (_, _), runtime_scope = info()
+        assert runtime_scope[:2] == (101,100), runtime_scope
+        palette('source parent')
+        inspect_document()
+        (_, _), kernel_scope = info()
+        assert kernel_scope[:2] == (100,1), kernel_scope
+
+        console_command('o', b'Graph path: /MiraOS')
+        console_command('i kernel', b'Node kernel')
+        console_command('c', b'SOURCE:')
+        inspect_document()
+        (_, _), kernel_scope = info()
+        assert kernel_scope[:2] == (100,1), kernel_scope
+        console_command('z kernel', b'Graph path: /MiraOS/kernel/Runtime')
+
         # The real bootstrap compiler lives in this same editable source tree.
         open_id(258)
         inspect_document()
@@ -699,10 +722,10 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         (_, _), compiler_scope = info()
         assert compiler_scope[0] == 258,compiler_scope
         counts = graph_counts()
-        console_command('z 259', b'space ID/cells/links:')
-        console_command('z 261', b'space ID/cells/links:')
+        console_command('z neural', b'cells/links:')
+        console_command('z dynamics', b'cells/links:')
         counts = graph_counts()
-        console_command('i 102', b'Node 102 state')
+        console_command('i state', b'Node state')
         console_command('c', b'SOURCE:')
         anchored = capture('object-navigation-contained-state')
         opened, line = inspect_document()
@@ -735,7 +758,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         open_id(45)
         other,_ = inspect_document()
         assert other[1] != edited[1]
-        palette('source open 33 state')
+        palette('source open cognition/state')
         again,_ = inspect_document()
         assert again == edited,(again,edited)
         # Global Undo opens the object owning the edit, even from another object.
@@ -753,7 +776,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         assert where[0] == 63,where
         start = console_command('C',b'SOURCE children of ')
         wait(b'ready> ',start,10)
-        assert b'33 state' in transcript[start:]
+        assert re.search(rb'(?m)^state\r?$',transcript[start:])
         palette('source project')
         inspect_document()
         (_, _),where = info()

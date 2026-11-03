@@ -46,10 +46,6 @@ pub fn load(path: &Path) -> Result<Program> {
 
 /// Open the authoritative source once, returning its derived Program and text view.
 pub fn open_source(path: &Path) -> Result<(Program, String)> {
-    if path.is_dir() {
-        let (tree, program) = source_tree::open(path)?;
-        return Ok((program, tree.assembled()?));
-    }
     use std::io::Read;
     let mut bytes = Vec::new();
     fs::File::open(path)
@@ -61,10 +57,6 @@ pub fn open_source(path: &Path) -> Result<(Program, String)> {
         return Err("project source exceeds storage budget".into());
     }
     let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
-    if text.trim_start().starts_with('{') {
-        let (tree, program) = source_tree::open(path)?;
-        return Ok((program, tree.assembled()?));
-    }
     Ok((syntax::parse(&text)?, text))
 }
 

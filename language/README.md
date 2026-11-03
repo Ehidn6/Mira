@@ -21,8 +21,8 @@ Host-компилятор проверяет текст командой `target
 | Что нужно | Код | Проверка поведения |
 |---|---|---|
 | Первый маленький граф, имена и вывод типов | `examples/first-graph` | `language_examples::beginner_graph_example_runs_and_explains_misplaced_arguments` |
-| Смешанный UI: свойства экземпляра, текст и число по графовым связям | `examples/interface-graph`, `../projects/MiraOS/widgets` | `language_examples::interface_graph_uses_the_native_mira_widgets_without_copying_them`; native overview `--overview-only` |
-| Изменяемые графовые шаблоны окна, независимые копии и транзакции | `examples/window-templates`, `../projects/MiraOS/template_window`, `template_layout`, `template_render`, `template_operations` | `structural_macros::window_templates_are_real_editable_graphs_with_independent_copies`; QEMU `--overview-only` |
+| Смешанный UI: свойства экземпляра, текст и число по графовым связям | `examples/interface-graph`, `source projects/MiraOS enter display/widgets` | `language_examples::interface_graph_uses_the_native_mira_widgets_without_copying_them`; native overview `--overview-only` |
+| Изменяемые графовые шаблоны окна, независимые копии и транзакции | `examples/window-templates`, `source projects/MiraOS enter kernel/Runtime/window_template` | `structural_macros::window_templates_are_real_editable_graphs_with_independent_copies`; QEMU `--overview-only` |
 | Вложенные определения, квалифицированные вызовы, типизированные связи | `examples/structure` | `crates/mira-lang/tests/nested_components.rs` |
 | Компонент с кодом/состоянием/Z, внутренняя операция, явный parent, тензор | `examples/state` | `crates/mira-lang/tests/language_examples.rs` |
 | Адреса, выравнивание, доступ к памяти, аппаратная операция | `examples/system` | `crates/mira-lang/tests/language_examples.rs` |
@@ -31,7 +31,7 @@ Host-компилятор проверяет текст командой `target
 | Незавершённые выражения и проверяемое заполнение | `examples/incomplete` (только draft) | тот же тест |
 | Код как данные: просмотр и ограниченные преобразования выражений на Mira | `examples/code` | `crates/mira-lang/tests/code_structure.rs` |
 | Обучаемый выбор допустимого типа, постоянные веса | `../compiler/assist.mira` | `crates/mira-lang/tests/assistant_types.rs` |
-| Компилятор на Mira: скаляры, блоки, циклы, вызовы | `examples/bootstrap`, `examples/bootstrap-blocks`, `../projects/MiraOS/compiler-parser` | `bootstrap_scalar::tests`, `crates/mira-lang/tests/bootstrap_native.rs`, `native_scalar_compiler.rs` |
+| Компилятор на Mira: скаляры, блоки, циклы, вызовы | `examples/bootstrap`, `examples/bootstrap-blocks`, `source projects/MiraOS enter compiler` | `bootstrap_scalar::tests`, `crates/mira-lang/tests/bootstrap_native.rs`, `native_scalar_compiler.rs` |
 | Массивы, структуры, адреса и вложенные определения в компиляторе на Mira | `examples/bootstrap-arrays`, `examples/bootstrap-records`, `examples/bootstrap-addresses`, `examples/bootstrap-nested` | `bootstrap_scalar::module_tests` |
 | `f32` в компиляторе на Mira: веса, массивы, поля, арифметика | `examples/bootstrap-floats` | `bootstrap_scalar::module_tests::mira_module_compiler_executes_f32_and_rejects_invalid_numeric_operations` |
 | Тензоры и базовые групповые операции в компиляторе на Mira | `examples/bootstrap-tensors` | `bootstrap_scalar::module_tests::mira_module_compiler_checks_tensor_shapes_and_executes_bulk_operations` |
@@ -49,7 +49,7 @@ Host-компилятор проверяет текст командой `target
 
 Вызов `cells.store.increment()` выбирает локальную операцию определения store и связывает её с экземпляром store. `cells.parent.store...` явно использует Z-область родительского экземпляра. `graph.parent.rate()` выбирает его графовый выход. Это тот же механизм исполнения; операция не требует отдельной runtime-ячейки. Пример state проверяет сохранение состояния между активациями и нативную компиляцию.
 
-Не путать: вложенная функция — определение кода; ячейка в space — экземпляр; принадлежащее экземпляру space — его графовое Z-пространство. Одно определение может использоваться несколькими экземплярами. Физическая упаковка исходников не создаёт ни определений, ни экземпляров. Не выдавать изменение одного уровня за изменение другого.
+Не путать: вложенная функция — определение кода; ячейка в space — экземпляр; принадлежащее экземпляру space — его графовое Z-пространство. Одно определение может использоваться несколькими экземплярами. Исходный контейнер хранит ту же вложенность определений и Z. Независимая группировка физических фрагментов удалена; код и дети находятся у самого объекта, полная текстовая программа получается как проекция для компиляции.
 
 Если нужной возможности здесь нет, найдите её определение/тест точечным поиском. Отсутствие в этой короткой карте не доказывает отсутствие в языке. При изменении языка обновляйте соответствующий пример и его проверку вместе.
 
@@ -125,7 +125,7 @@ Normalize требует равные rank2/f32 формы, допускает o
 
 Индексирование разбито на module_index_begin/module_index_step, emission — на module_prepare/module_emit_next. Обычные module_index/module_emit вызывают эти же шаги, второй реализации нет. Предварительный обход типов идёт порциями по512 шагов сканера, затем индексируется одна декларация; emission обрабатывает одну функцию. Незавершённая сборка не линкуется. Общий fuel внутреннего вызова не сбрасывается; временный регион возвращается при выходе.
 
-Исходный объект компилятора хранится шестью физическими частями `projects/MiraOS/compiler-{lexer,parser,types,x86,module,data}`. Это те же вложенные определения одного `compiler @258`, без импортов, копий и новых runtime-ячеек. Чтение по имени/ID собирает нужный объект из общего индекса; bootstrap встраивает эти же части и собирает их тем же source_tree, не требуя checkout при запуске.
+Исходный объект compiler @258 со всеми определениями и типами содержится внутри рекурсивного projects/MiraOS. `source projects/MiraOS enter compiler` показывает только его собственный код и непосредственных детей; read compiler разворачивает поддерево. Bootstrap читает этот же объект из встроенного контейнера без отдельных частей/index, импортов или копий реализации.
 
 `compiler.aggregate_encoding` генерирует обычные native-инструкции для полей, индексов, инициализации, выделения/выравнивания, обнуления и проверок typed views. Там же генерируются разрешение tagged persistent handles через активный банк и барьер опубликованной записи. Это действующий путь native/kernel/UEFI backend, а не отдельный экспериментальный компилятор. Общие типы/layout, порядок выражений, scopes, fuel и связывание traps/state остаются прежними; Rust-адаптер подставляет проверенные layout-константы и цели исправлений. Примеры `examples/bootstrap-data`, `examples/aligned-data`; целевые проверки bootstrap_native и native_abi/aligned_aggregates, native_region_handles. Полный разбор записей и других агрегатов в переносимом frontend пока не реализован; ограниченные массивы доступны через module-профиль выше.
 
@@ -148,3 +148,19 @@ Normalize требует равные rank2/f32 формы, допускает o
 В macro вызов `display.templates.instantiate(prototype,target_space)` использует прежний meta.clone_cell: новые ID для экземпляра, внутренних ячеек, Z и связей, без изменения прототипа. `display.templates.header_rows(instance,2)` находит внутреннюю ячейку header по имени и меняет только её параметр; порядок внутренних частей менять можно. Общие определения кода остаются общими: для собственного поведения можно создать другое определение и заменить соответствующий узел в раскрытом исходном графе. Самоклонирование исходников кода для каждой копии автоматически не выполняется.
 
 `examples/window-templates` — macro-рецепт в контексте настоящих модулей шаблона. Он создаёт две копии, задаёт разные заголовки, добавляет внутренний узел и меняет разрешение отрисовки одной копии. Тест собирает контекст из canonical исходников MiraOS, проверяет связи/независимость/rollback и компилирует вызов окна freestanding backend. Нет нового формата шаблонов или обязательного типа окна: развёрнутый результат — обычный Program, доступный для изменения и сохранения. Нынешняя SourceTree pinning не сохраняет исходный expand-рецепт как автоматически обновляемую связь с материализованными копиями. Макросы пока запускаются bootstrap-компилятором; source run в самой ОС не умеет разворачивать их и заменять работающий интерфейс. Это ограничение текущего native frontend, а не готовый интерактивный визуальный конструктор.
+
+### Рекурсивный исходный объект и Z
+
+`examples/recursive-source` показывает first → Inside → value и поперечные связи с общим определением helper. Источник истины — сам вложенный код Mira, без JSON/внешнего индекса/таблицы смещений. `source INPUT enter first/Inside` показывает собственную композицию и вход value, без разворачивания всего проекта и без @ID в показанном коде. Для машинного ответа доступен --json, он не является форматом исходников. `read first/Inside/value` читает выбранное поддерево с техническими ID для точного редактирования. `write first/Inside/value /absolute/fragment` сохраняет ID/связи и проверяет программу; имена и пути не требуют помнить номера. Нельзя пропускать Z-уровни. `behavior first` следует существующей связи с общим helper, без копирования.
+
+`examples/owned-source` показывает компонент с собственным алгоритмом и вложенным Z-графом:
+
+```mira
+space Main:
+  kernel = code ()->i64 =
+    cells.value() + 3
+    space Runtime:
+      value = 7
+```
+
+Здесь kernel — один исходный объект с собственным кодом; отдельного boot или промежуточного файла поведения нет. Runtime — вложенный исходный объект с реальными вычислениями/портами/связями, а не папка. CodeModule.owner привязывает реализацию к экземпляру, не создавая вторую модель исполнения. Автоматическое клонирование inline-реализации через meta.clone_cell пока не поддержано; ошибочная попытка разделить такую реализацию блокируется проверкой. Внутренний ID реализации сохраняется инструментом, его не требуется писать в обычном примере. Общая функция по-прежнему может быть явным переиспользуемым определением. Проверка tests/source_tree.rs читает оба примера через include_str, исполняет компонент, компилирует native-код, изменяет вложенный value, сохраняет/перечитывает и проверяет roundtrip. Native редактор/диск пока работают с той же текстовой проекцией; полноценное объектное сохранение на диске MiraOS ещё не реализовано.

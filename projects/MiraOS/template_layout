@@ -1,4 +1,0 @@
-  window_region @448 (view:WidgetView,header:i64,body:bool)->WidgetView =
-    rows = header < 0 ? 0 : (header > view.height ? view.height : header)
-    WidgetView(view.column,view.line + (body ? rows : 0),view.width,body ? view.height - rows : rows,view.foreground,view.background)
-

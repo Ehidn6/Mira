@@ -40,6 +40,19 @@ pub fn format(program: &Program) -> String {
             }
         }
         for c in &s.cells {
+            let owned = if let Definition::Code(id) = c.definition {
+                code::find(&program.code_modules, id).filter(|d| d.owner == Some(c.id))
+            } else { None };
+            if let Some(definition) = owned {
+                let mut body = definition.clone();
+                body.name = "code".into();
+                let text = crate::behavior::format_with_types(&body, &program.data_types());
+                let mut lines = text.lines();
+                writeln!(out, "{pad}  {} @{} {} = {}", crate::behavior::quote_identifier(&c.name), c.id, pos(c.position), lines.next().unwrap_or("")).unwrap();
+                for line in lines { writeln!(out, "{pad}  {line}").unwrap(); }
+                if let Some(inner) = &c.space { space(program, inner, out, depth + 2); }
+                continue;
+            }
             let behavior = behavior_in(program, c);
             writeln!(
                 out,
@@ -157,7 +170,7 @@ pub fn format(program: &Program) -> String {
     for ty in &program.global_types {
         crate::behavior::format_data(ty, 0, true, &program.data_types(), &mut out);
     }
-    for definition in &program.code_modules {
+    for definition in program.code_modules.iter().filter(|d| d.owner.is_none()) {
         out.push_str(&crate::behavior::format_with_types(
             definition,
             &program.data_types(),
