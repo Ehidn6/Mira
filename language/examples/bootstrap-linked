@@ -1,0 +1,11 @@
+// Sibling definitions share one lexical component; no import list is needed.
+type LinkedValues @9003 = [i64,2]
+linked_helper @9001(values:LinkedValues)->i64 = linked_leaf(values[0]) + linked_leaf(values[1])
+layout @231()->i64 = branch.finish(linked_helper(LinkedValues(6,7)))
+linked_leaf @9002(value:i64)->i64 = value * 3
+unrelated @9004()->unit =
+  ()
+  linked_leaf @9005(value:i64)->i64 = value * 99
+branch @9006(value:i64)->i64 =
+  value - 1
+  finish @9007(value:i64)->i64 = value + 2

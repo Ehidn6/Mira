@@ -16,13 +16,16 @@
         d.compile_offset = d.scope_start
         d.compile_length = d.scope_end - d.scope_start
         d.compile_size = 0
-        if d.scope_id == reflect.root() or d.compile_length <= 0 or d.compile_length > 8192
+        d.compile_functions = 0
+        d.compile_parts = 0
+        if d.scope_id == reflect.root() or d.compile_length <= 0 or d.compile_length > ScalarSource.size_bytes() / 8
           d.compile_status = 3
           d.compile_error = 13
         else if d.compile_workspace == 0
           bytes = ScalarSource.size_bytes() + ModuleSymbols.size_bytes() + ScalarParameters.size_bytes()
           bytes += ScalarNodes.size_bytes() + ScalarBytes.size_bytes() * 2 + ScalarFixups.size_bytes() * 2
           bytes += ModuleState.size_bytes() + ScalarWork.size_bytes() + LexBytes.size_bytes() + LexState.size_bytes()
+          bytes += CompileSelection.size_bytes()
           d.compile_workspace = cells.parent.hardware.physical_allocate((bytes + 1048576 + 4095) / 4096,4096)
           if d.compile_workspace == 0
             d.compile_status = 3
@@ -65,18 +68,26 @@
         window = LexBytes.at(sys.addr(offset))
         offset += LexBytes.size_bytes()
         lexer_state = LexState.at(sys.addr(offset))
+        offset += LexState.size_bytes()
+        selection = CompileSelection.at(sys.addr(offset))
         if d.compile_phase == 0
-          for index in 0..d.compile_length
-            input[index] = cells.parent.editor.byte(d.compile_offset + index)
-          // Snapshot bytes are separate from the mutable editor and running code.
+          copied = snapshot(input,selection)
           module.length = d.compile_length
         phase = d.compile_phase
-        checked = sys.scratch(step,350000,input,symbols,parameters,nodes,output,body,fixups,relocations,module,work,window,lexer_state,phase)
-        if module.error != 0
-          d.compile_status = 3
-          d.compile_error = module.error
-          d.compile_error_offset = module.error_offset
+        if d.compile_status == 1
+          checked = sys.scratch(step,350000,input,symbols,parameters,nodes,output,body,fixups,relocations,module,work,window,lexer_state,phase,d.compile_scope)
+        if d.compile_status != 1
           sys.scratch(report,4096,0)
+        else if module.error != 0
+          d.compile_error_offset = origin(selection,module.error_offset)
+          dependency = (module.error == 2 or module.error == 7) and include(input,selection,module.error_offset)
+          if dependency
+            // Retry the same module API with a larger closure, never a fallback compiler.
+            d.compile_phase = 0
+          else
+            d.compile_status = 3
+            d.compile_error = module.error
+            sys.scratch(report,4096,0)
         else if phase == 0
           d.compile_phase = 1
         else if phase == 1 and module.phase == 3
@@ -86,7 +97,10 @@
         else if phase == 3
           d.compile_size = module.size
           d.compile_entry = module.entry
-          d.compile_type = symbols[1]
+          d.compile_functions = module.count
+          for index in 0..module.count
+            if symbols[index * 128 + 19] == d.compile_scope
+              d.compile_type = symbols[index * 128 + 1]
           for index in 0..module.size
             sys.store8(sys.addr(d.compile_address + index),output[index])
           barrier = sys.cpuid_eax(0,0)
@@ -95,19 +109,23 @@
           if d.compile_run
             invoke()
 
-    step @424 (input:ScalarSource,symbols:ModuleSymbols,parameters:ScalarParameters,nodes:ScalarNodes,output:ScalarBytes,body:ScalarBytes,fixups:ScalarFixups,relocations:ScalarFixups,module:ModuleState,work:ScalarWork,window:LexBytes,lexer_state:LexState,phase:i64)->i64 =
+    step @424 (input:ScalarSource,symbols:ModuleSymbols,parameters:ScalarParameters,nodes:ScalarNodes,output:ScalarBytes,body:ScalarBytes,fixups:ScalarFixups,relocations:ScalarFixups,module:ModuleState,work:ScalarWork,window:LexBytes,lexer_state:LexState,phase:i64,entry:i64)->i64 =
       lexer = ScalarLexer(window,lexer_state)
       literal = LiteralBytes()
       value = LiteralValue()
       if phase == 0
-        initialized = compiler.module_index_begin(input,module.length,0,module,symbols,work,lexer,literal,value,parameters)
+        initialized = compiler.module_index_begin(input,module.length,entry,module,symbols,work,lexer,literal,value,parameters)
       else if phase == 1
         indexed = compiler.module_index_step(input,module,symbols,work,lexer,literal,value,parameters)
         if module.error == 0 and module.phase == 3
-          // The selected definition is the first function, including implicit IDs.
-          module.entry_id = symbols[19]
-          if symbols[2] != 0 or (symbols[1] != 1 and symbols[1] != 2 and symbols[1] != 4 and symbols[1] != 16)
-            compiler.module_fail(module,12,symbols[96])
+          selected = -1
+          for index in 0..module.count
+            if symbols[index * 128 + 19] == module.entry_id
+              selected = index * 128
+          if selected < 0
+            compiler.module_fail(module,12,0)
+          else if symbols[selected + 2] != 0 or (symbols[selected + 1] != 1 and symbols[selected + 1] != 2 and symbols[selected + 1] != 4 and symbols[selected + 1] != 16)
+            compiler.module_fail(module,12,symbols[selected + 96])
           if module.error == 0
             compiler.module_prepare(module,symbols,parameters)
       else if phase == 2
@@ -192,14 +210,110 @@
           cells.parent.workspace.number(d.compile_length)
           cells.parent.workspace.put(47)
           cells.parent.workspace.number(d.compile_size)
+          cells.parent.workspace.write(Text(" | linked objects/functions: "))
+          cells.parent.workspace.number(d.compile_parts)
+          cells.parent.workspace.put(47)
+          cells.parent.workspace.number(d.compile_functions)
           cells.parent.workspace.write(Text(" | Alt+X source run\n"))
         else
           cells.parent.workspace.write(Text("COMPILE rejected: "))
-          message = d.compile_error == 11 ? Text("raw addresses and device access are disabled for trial execution") : d.compile_error == 12 ? Text("entry needs no inputs and an i64/f32/bool/unit result") : d.compile_error == 13 ? Text("open one function object, at most 8 KiB, instead of the complete project") : d.compile_error == 14 ? Text("not enough physical memory for compiler workspace") : d.compile_error == 15 ? Text("source or selection changed; compile the current object again") : d.compile_error == 10 ? Text("temporary object cannot leave its function") : d.compile_error == 6 ? Text("incompatible types or arguments") : d.compile_error == 2 ? Text("unknown name/type or unsupported language operation") : d.compile_error == 4 ? Text("compiler input/node/code limit exceeded") : Text("invalid syntax, literal or definition")
+          message = d.compile_error == 11 ? Text("raw addresses and device access are disabled for trial execution") : d.compile_error == 12 ? Text("entry needs no inputs and an i64/f32/bool/unit result") : d.compile_error == 13 ? Text("select a function; linked source must fit the 256 KiB input limit") : d.compile_error == 14 ? Text("not enough physical memory for compiler workspace") : d.compile_error == 15 ? Text("source or selection changed; compile the current object again") : d.compile_error == 16 ? Text("source object index is invalid; repair the project structure first") : d.compile_error == 10 ? Text("temporary object cannot leave its function") : d.compile_error == 6 ? Text("incompatible types or arguments") : d.compile_error == 2 ? Text("unknown name/type or unsupported language operation") : d.compile_error == 4 ? Text("compiler input/node/code limit exceeded") : Text("invalid syntax, literal or definition")
           cells.parent.workspace.write(message)
           cells.parent.workspace.write(Text("\nerror/absolute source byte: "))
           cells.parent.workspace.number(d.compile_error)
           cells.parent.workspace.put(47)
-          cells.parent.workspace.number(d.compile_offset + d.compile_error_offset)
+          cells.parent.workspace.number(d.compile_error_offset)
           cells.parent.workspace.put(10)
+
+    // Only compilation marks and diagnostic offsets; the editor's source index
+    // remains the authority for names, parents, identities and original ranges.
+    type CompileSelection @428 = [i64,3072]
+    snapshot @429 (input:ScalarSource,selection:CompileSelection)->bool =
+      d = cells.parent.editor.document()
+      if d.compile_parts == 0
+        selected = cells.parent.editor.parts.find(d.compile_scope)
+        if selected <= 0
+          d.compile_error = 16
+        else
+          for index in 0..selection.len
+            selection[index] = 0
+          selection[selected * 3] = 1
+          d.compile_parent = cells.parent.editor.parts.get(selected,1)
+          d.compile_parts = 1
+      length = 0
+      for index in 0..(d.compile_error == 0 ? d.part_count : 0)
+        if selection[index * 3] == 1
+          start = cells.parent.editor.parts.get(index,2)
+          end = cells.parent.editor.parts.get(index,3)
+          if start < 0 or end < start or end > d.length or end - start + 1 > input.len - length
+            d.compile_error = 13
+            d.compile_error_offset = start
+          else if d.compile_error == 0
+            selection[index * 3 + 1] = length
+            for position in start..end
+              input[length] = cells.parent.editor.byte(position)
+              length += 1
+              if length % 512 == 0
+                cells.parent.keyboard.collect()
+            selection[index * 3 + 2] = length
+            // A separator is compilation metadata, not an edit to source.
+            input[length] = 10
+            length += 1
+      d.compile_length = length
+      if d.compile_error != 0
+        d.compile_status = 3
+      d.compile_error == 0
+
+    include @430 (input:ScalarSource,selection:CompileSelection,offset:i64)->bool =
+      d = cells.parent.editor.document()
+      first = offset
+      end = first
+      if first >= 0 and first < d.compile_length
+        while end < d.compile_length and end - first < 64 and (compiler.letter(input[end]) or compiler.digit(input[end]) or input[end] == 95)
+          end += 1
+      included = false
+      if end > first
+        for index in 1..d.part_count
+          // Siblings retain the same lexical scope when projected together.
+          // Do not flatten ancestors or private children from another component.
+          if not included and selection[index * 3] == 0 and cells.parent.editor.parts.get(index,1) == d.compile_parent
+            start = cells.parent.editor.parts.get(index,5)
+            last = cells.parent.editor.parts.get(index,6)
+            same = last - start == end - first
+            for byte in 0..(same ? end - first : 0)
+              same = same and cells.parent.editor.byte(start + byte) == input[first + byte]
+            if same
+              line = cells.parent.editor.parts.get(index,2) + cells.parent.editor.parts.get(index,4)
+              function = start == line
+              if function
+                next = last
+                while cells.parent.editor.byte(next) == 32
+                  next += 1
+                if cells.parent.editor.byte(next) == 64
+                  next += 1
+                  while compiler.digit(cells.parent.editor.byte(next))
+                    next += 1
+                while cells.parent.editor.byte(next) == 32
+                  next += 1
+                function = cells.parent.editor.byte(next) == 40
+              kind = 0
+              if start > line and start - line <= 7
+                for byte in line..start - 1
+                  kind = kind | (cells.parent.editor.byte(byte) << ((byte - line) * 8))
+              if function or kind == 0x65707974 or kind == 0x746375727473
+                selection[index * 3] = 1
+                d.compile_parts += 1
+                included = true
+      included
+
+    origin @431 (selection:CompileSelection,offset:i64)->i64 =
+      d = cells.parent.editor.document()
+      result = d.compile_offset
+      for index in 1..d.part_count
+        if selection[index * 3] == 1
+          first = selection[index * 3 + 1]
+          end = selection[index * 3 + 2]
+          if offset >= first and offset <= end
+            result = cells.parent.editor.parts.get(index,2) + offset - first
+      result
 

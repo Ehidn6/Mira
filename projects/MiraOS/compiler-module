@@ -594,7 +594,7 @@
   module_types_step @379 (text:ScalarSource,s:ScalarWork,lex:ScalarLexer,literal:LiteralBytes,value:LiteralValue,parameters:ScalarParameters)->unit =
     tokens = 0
     while s.error == 0 and s.kind != 6 and tokens < 512
-      if (s.linebreak or s.start == 0) and s.kind == 1 and (s.word == 0x65707974 or s.word == 0x746375727473)
+      if (s.linebreak or s.line_start == 0) and s.kind == 1 and (s.word == 0x65707974 or s.word == 0x746375727473)
         start = s.start
         column = s.column
         module_type(text,s,lex,literal,value,parameters)

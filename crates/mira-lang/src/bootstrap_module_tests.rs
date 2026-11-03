@@ -610,3 +610,27 @@ fn mira_module_compiler_returns_borrowed_objects_and_rejects_temporary_escape() 
     assert_eq!(w.field("error")?, 0);
     Ok(())
 }
+
+#[test]
+fn mira_module_compiler_selects_linked_entry_and_locates_unresolved_names() -> Result<()> {
+    let mut w = Workspace::new()?;
+    let source = include_str!("../../../language/examples/bootstrap-linked");
+    let model = crate::frontend::parse_seed(source)?;
+    assert_eq!(crate::behavior::execute(&model,231,&[])?,41);
+    let image = w.compile(source,231)?;
+    assert_eq!(w.field("error")?,0,"byte {}",w.field("error_offset")?);
+    let path = std::env::temp_dir().join(format!("mira-linked-entry-{}",std::process::id()));
+    std::fs::write(&path,image).unwrap();
+    std::fs::set_permissions(&path,std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(Command::new(&path).status().unwrap().code(),Some(41));
+    std::fs::remove_file(&path).unwrap();
+    let indented = source.lines().map(|line|format!("    {line}\n")).collect::<String>();
+    assert!(!w.compile(&indented,231)?.is_empty(),"indented module error {} at {}",w.field("error")?,w.field("error_offset")?);
+    for expression in ["missing(7)","missing + 1","missing.finish(7)"] {
+        let source = format!("entry @1()->i64 = {expression}\n");
+        assert!(w.compile(&source,1)?.is_empty());
+        assert_eq!(w.field("error")?,2);
+        assert_eq!(w.field("error_offset")? as usize,source.find("missing").unwrap(),"{source}");
+    }
+    Ok(())
+}

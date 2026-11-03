@@ -230,6 +230,8 @@
             symbol = -1
             array = -1
           if symbol < 0 and array < 0 and intrinsic < 0
+            // Keep the unresolved name, rather than the following parenthesis.
+            s.start = start
             scalar_fail(s,2)
           scalar_next(text,s,lex)
           arguments = -1
@@ -249,6 +251,7 @@
         else if parameter >= 0
           result = scalar_node(s,nodes,1,parameter,0,0,start)
         else
+          s.start = start
           scalar_fail(s,2)
       else
         scalar_fail(s,3)
@@ -295,6 +298,7 @@
   // Statement nodes: store=7, sequence=8, if=9, unit=10, expression=11.
   // Store op bits: assignment tag 0..5; declaration=256, const=512;
   // explicit annotation (type code + 1) in bits 16..18.
+
   scalar_statement @325 (text:ScalarSource,s:ScalarWork,lex:ScalarLexer,literal:LiteralBytes,value:LiteralValue,nodes:ScalarNodes,parameters:ScalarParameters,indent:i64,depth:i64)->i64 =
     result = -1
     offset = s.start

@@ -188,6 +188,10 @@ editor @189 (value:i64)->unit =
     compile_type: i64
     compile_result: i64
     compile_trap: i64
+    compile_parent: i64
+    compile_parts: i64
+    compile_functions: i64
+
 
   document @165 ()->SourceDocument = SourceDocument.persist()
 

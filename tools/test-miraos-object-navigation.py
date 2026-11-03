@@ -58,11 +58,11 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
     transcript = bytearray()
     sock = None
     stream = None
-    deadline = time.monotonic() + 240
+    deadline = time.monotonic() + (360 if '--linked-only' in sys.argv else 240)
 
     def pump(seconds=.05):
         if time.monotonic() > deadline:
-            raise RuntimeError('USB keyboard test exceeded 240 seconds')
+            raise RuntimeError('USB keyboard test exceeded its deadline')
         for key, _ in selector.select(seconds):
             transcript.extend(key.fileobj.read1(8192))
 
@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             qmp('input-send-event', {'events': [
                 {'type': 'key', 'data': {'down': down, 'key': {'type': 'qcode', 'data': key}}}
                 for key in ordered]})
-            settle(.12 if '--runner-only' in sys.argv else .07)
+            settle(.12 if '--runner-only' in sys.argv or '--linked-only' in sys.argv else .07)
 
     def console_command(letter, marker):
         start = len(transcript)
@@ -155,7 +155,8 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         punctuation = {' ': ('spc',), '\n': ('ret',), '_': ('shift', 'minus'),
             '(': ('shift', '9'), ')': ('shift', '0'), ':': ('shift', 'semicolon'),
             '=': ('equal',), '.': ('dot',), '-': ('minus',), '>': ('shift', 'dot'), '/': ('slash',),
-            '@': ('shift','2'), '*': ('shift','8'), '+': ('shift','equal'), ',': ('comma',)}
+            '@': ('shift','2'), '*': ('shift','8'), '+': ('shift','equal'), ',': ('comma',),
+            '[': ('bracket_left',), ']': ('bracket_right',), ';': ('semicolon',)}
         for char in text:
             if char in punctuation:
                 press(*punctuation[char])
@@ -195,6 +196,79 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             subprocess.run(['hyprctl', 'dispatch',
                 f'hl.dsp.focus({{window="address:{previous_focus}"}})'],
                 check=True, stdout=subprocess.DEVNULL, timeout=5)
+        if '--linked-only' in sys.argv:
+            original = (image / 'source.mira').read_bytes()
+            prefix = re.search(rb'(?m)^([ ]*)layout @231',original).group(1).decode()
+
+            def action(query):
+                press('alt','x')
+                type_text(query)
+                start = len(transcript)
+                press('ret')
+                return start
+
+            def open_id(identity):
+                start = action('source open '+str(identity))
+                wait(b'SOURCE:',start,15)
+
+            def replace_text(text):
+                press('alt','shift','comma')
+                press('ctrl','spc')
+                press('alt','shift','dot')
+                press('ctrl','w')
+                type_text(text)
+
+            open_id(231)
+            example = (root / 'language/examples/bootstrap-linked').read_text()
+            replace_text(''.join(prefix+line+'\n' for line in example.splitlines()))
+            # Reopen the entry: the helper/type definitions are now separate
+            # source-index objects, not text contained in this selected range.
+            open_id(231)
+            start = action('source run')
+            wait(b'RUN result: 41',start,45)
+            assert b'linked objects/functions: 5/5' in transcript[start:], bytes(transcript[start:])
+            capture('native-editor-linked-result')
+            start = action('source run')
+            wait(b'RUN result: 41',start,10)
+            assert b'COMPILE:' not in transcript[start:] and b'COMPILE ready' not in transcript[start:]
+            # Editing a sibling must invalidate a cached entry in another object.
+            open_id(9002)
+            replace_text(prefix+'linked_leaf @9002(value:i64)->i64 = value * 4\n')
+            open_id(231)
+            start = action('source run')
+            wait(b'RUN result: 54',start,45)
+            assert b'COMPILE ready' in transcript[start:]
+            # A private same-name function from another subtree is not visible.
+            open_id(9002)
+            bad_leaf = prefix+'linked_leaf @9002(value:i64)->i64 = missing(7)\n'
+            replace_text(bad_leaf)
+            info = action('source info')
+            wait(b'source object/parent/range:',info,10)
+            found = re.search(rb'source object/parent/range: 9002/\d+/(\d+)/(\d+)',transcript[info:])
+            assert found, bytes(transcript[info:])
+            missing_offset = int(found.group(1)) + bad_leaf.index('missing')
+            open_id(231)
+            start = action('source run')
+            wait(b'COMPILE rejected:',start,45)
+            wait(('error/absolute source byte: 2/'+str(missing_offset)).encode(),start,5)
+            assert b'RUN result:' not in transcript[start:]
+            capture('native-editor-linked-error')
+            # Removing the visible sibling must not resolve its private namesake.
+            open_id(9002)
+            replace_text(prefix+'different @9002(value:i64)->i64 = value * 4\n')
+            open_id(231)
+            start = action('source run')
+            wait(b'COMPILE rejected:',start,45)
+            assert b'RUN result:' not in transcript[start:]
+            open_id(9002)
+            replace_text(prefix+'linked_leaf @9002(value:i64)->i64 = value * 3\n')
+            open_id(231)
+            start = action('source run')
+            wait(b'RUN result: 41',start,45)
+            print('PASS: sibling function/type discovery, transitive and qualified calls, explicit entry identity, cache invalidation, lexical isolation and recovery')
+            qmp('quit')
+            assert process.wait(timeout=5) == 0
+            sys.exit(0)
         if '--runner-only' in sys.argv:
             original = (image / 'source.mira').read_bytes()
             matched = re.search(rb'(?m)^([ ]*)layout @231',original)
