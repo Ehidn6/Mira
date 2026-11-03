@@ -1,0 +1,15 @@
+// Runs in the same definition context as MiraOS/template_* (no second UI model).
+macro build_windows()->unit =
+  ui = reflect.inner(reflect.cell_at(reflect.root(),0))
+  prototype = reflect.cell_at(ui,0)
+  first = display.templates.instantiate(prototype,ui)
+  second = display.templates.instantiate(prototype,ui)
+  display.templates.header_rows(first,1)
+  display.templates.header_rows(second,2)
+  // Open a copy and change its structure, rather than a fixed list of settings.
+  header = display.templates.child_named(first,0x726564616568,6)
+  extra = meta.clone_cell(header,reflect.inner(first))
+  meta.set_parameter(extra,7)
+  // Change the actual render dependency for this copy only.
+  ready = display.templates.child_named(first,0x7964616572,5)
+  meta.set_parameter(ready,0)

@@ -567,7 +567,11 @@ impl Builder<'_> {
                 {
                     let key = format!("#{op}.{}", port.name);
                     // Private storage only: typed zero is never read while absent.
-                    body.push(bind(key.clone(), Some(port.ty), Expr::Int(0)));
+                    body.push(bind(key.clone(), Some(port.ty), if port.ty == Type::Bool {
+                        Expr::Bool(false)
+                    } else {
+                        Expr::Int(0)
+                    }));
                     body.push(bind(format!("{key}?"), Some(Type::Bool), Expr::Bool(false)));
                 }
             }
@@ -670,6 +674,7 @@ impl Builder<'_> {
                 "#result".into(),
                 Some(output),
                 match output {
+                    Type::Bool => Expr::Bool(false),
                     Type::F32 => Expr::Float(0),
                     Type::Data(id) => Expr::Construct(id, vec![]),
                     _ => Expr::Int(0),

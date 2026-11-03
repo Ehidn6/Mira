@@ -632,9 +632,27 @@ pub fn expand(program: &mut Program, invocations: &[Invocation]) -> Result<()> {
         let mut stage_program = program.clone();
         // Runtime bodies may use contextual cells/hardware. They are not part of
         // the compile-time call graph and must not enter its unbound checker.
-        stage_program
-            .code_modules
-            .retain(|m| checked.contains(&m.id));
+        // Keep lexical ancestors of reachable nested helpers. Their runtime
+        // bodies are excluded, but their names still qualify the same tree.
+        fn staging_modules(modules: &mut Vec<CodeModule>, checked: &BTreeSet<Id>) {
+            modules.retain_mut(|module| {
+                staging_modules(&mut module.locals, checked);
+                if checked.contains(&module.id) {
+                    return true;
+                }
+                if module.locals.is_empty() {
+                    return false;
+                }
+                module.parameters.clear();
+                module.output = Type::Unit;
+                module.output_ports = false;
+                module.annotated = true;
+                module.compile_time = false;
+                module.body = vec![Statement::Expr(Expr::Unit)];
+                true
+            });
+        }
+        staging_modules(&mut stage_program.code_modules, &checked);
         crate::behavior::execute_macro(
             &stage_program,
             module.id,

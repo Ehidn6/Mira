@@ -216,7 +216,7 @@
         if label[index] != 0
           content[index + offset] = label[index]
       view = WidgetView(left,4 + relative,width,1,accent ? 0x65cbd6 : 0xe1ebe6,0x19282a)
-      cells.parent.display.paint(surface,view,content)
+      painted = cells.parent.window_template(surface,view,Text(),content)
 
     type PaletteChoices @447 = [i64,5]
 

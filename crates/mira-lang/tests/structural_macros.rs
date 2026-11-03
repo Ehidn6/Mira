@@ -79,3 +79,58 @@ fn identical_port_types_remain_distinct_and_stage_excludes_runtime_bodies() {
     assert_eq!(output.deliveries[&(102, "out".into())], 4);
     assert_eq!(output.deliveries[&(103, "out".into())], 10);
 }
+
+#[test]
+fn window_templates_are_real_editable_graphs_with_independent_copies() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../projects/MiraOS").canonicalize().unwrap();
+    fn fragment(root: &std::path::Path, id: u64, indent: usize) -> String {
+        let text = mira_lang::source_tree::read_selected(root,id).unwrap();
+        let old = text.lines().find(|l| !l.trim().is_empty()).unwrap()
+            .bytes().take_while(|b| *b == b' ').count();
+        text.lines().map(|l| format!("{}{}\n"," ".repeat(indent),&l[old.min(l.len())..])).collect()
+    }
+    let mut source = String::from("identities 1000\n");
+    for id in [2,29,440,445] { source.push_str(&fragment(&root,id,0)); }
+    source.push_str("display()->unit =\n  ()\n");
+    for id in [439,443,444,448,449,450] {source.push_str(&fragment(&root,id,2));}
+    source.push_str("boot()->unit =\n  drawn = cells.window_template(Console(),WidgetView(0,0,12,3,0xffffff,0),Text(),Text())\nspace Main:\n  kernel = boot():\n    space UI:\n");
+    source.push_str(&fragment(&root,454,6));
+    source.push_str(include_str!("../../../language/examples/window-templates"));
+    source.push_str("expand build_windows()\n");
+    let program = mira_lang::syntax::parse(&source).unwrap();
+    let ui = program.root.cells[0].space.as_ref().unwrap();
+    assert_eq!(ui.cells.len(),3);
+    let original = ui.cells[0].space.as_ref().unwrap();
+    let first = ui.cells[1].space.as_ref().unwrap();
+    let second = ui.cells[2].space.as_ref().unwrap();
+    let parameter = |space: &mira_core::Space,name: &str| space.cells.iter().find(|c| c.name==name).unwrap().parameter;
+    assert_eq!(parameter(original,"header"),0);
+    assert_eq!(parameter(first,"header"),1);
+    assert_eq!(parameter(second,"header"),2);
+    assert_eq!(parameter(first,"ready"),0);
+    assert_eq!(parameter(second,"ready"),1);
+    assert_eq!(first.cells.len(),original.cells.len()+1);
+    assert_eq!(second.cells.len(),original.cells.len());
+    for window in &ui.cells {
+        let inner = window.space.as_ref().unwrap();
+        for link in &inner.links {
+            assert!(link.from.cell==inner.id || inner.cells.iter().any(|c| c.id==link.from.cell));
+            assert!(link.to.cell==inner.id || inner.cells.iter().any(|c| c.id==link.to.cell));
+        }
+    }
+    assert_eq!(mira_lang::syntax::parse(&mira_lang::syntax::format(&program)).unwrap(),program);
+    // The window/renderer graph is accepted by the real freestanding backend.
+    assert!(!mira_lang::kernel::compile(&program).unwrap().is_empty());
+    // A surface with video=false delivers a real false result, not an absent
+    // signal. The same graph also executes without invoking hardware drawing.
+    mira_lang::runtime::execute(&program,1).unwrap();
+    // A failed template edit cannot publish the first, already performed clone.
+    let bad = source.replace("display.templates.header_rows(second,2)","display.templates.header_rows(0,2)");
+    let mut draft = mira_lang::syntax::parse(&bad.replace("expand build_windows()\n","")).unwrap();
+    let before = draft.clone();
+    assert!(mira_lang::metaprogram::expand(&mut draft,&[mira_lang::metaprogram::Invocation {
+        name: "build_windows".into(), args: vec![],
+    }]).is_err());
+    assert_eq!(draft,before);
+}

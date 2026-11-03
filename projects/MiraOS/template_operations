@@ -1,0 +1,24 @@
+  templates @450 ()->unit =
+    ()
+
+    macro instantiate @451 (prototype:i64,target:i64)->i64 =
+      meta.clone_cell(prototype,target)
+
+    // Find an ordinary local cell by up to eight ASCII bytes, not its ID or order.
+    macro header_rows @452 (instance:i64,rows:i64)->unit =
+      header = child_named(instance,0x726564616568,6)
+      meta.set_parameter(header,rows)
+
+    macro child_named @453 (instance:i64,word:i64,length:i64)->i64 =
+      graph = reflect.inner(instance)
+      found = 0
+      if length > 0 and length <= 8
+        for index in 0..reflect.cell_count(graph)
+          child = reflect.cell_at(graph,index)
+          matches = reflect.name_byte(child,length) == -1
+          for byte in 0..length
+            matches = matches and reflect.name_byte(child,byte) == ((word >> (byte * 8)) & 255)
+          if matches
+            found = child
+      found
+

@@ -1,0 +1,5 @@
+  window_text @449 (surface:Console,view:WidgetView,text:Text,ready:bool)->bool =
+    if ready and surface.video
+      paint(surface,view,text)
+    ready and surface.video
+
