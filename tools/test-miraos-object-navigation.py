@@ -199,6 +199,88 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             subprocess.run(['hyprctl', 'dispatch',
                 f'hl.dsp.focus({{window="address:{previous_focus}"}})'],
                 check=True, stdout=subprocess.DEVNULL, timeout=5)
+        if '--overview-only' in sys.argv:
+            def action(query):
+                press('alt', 'x')
+                type_text(query)
+                start = len(transcript)
+                press('ret')
+                return start
+
+            def info():
+                start = action('source info')
+                return report(start, ready=False)
+
+            def live_region(picture):
+                width, height, _ = picture
+                columns = width // 8
+                left = min(columns // 6, 32) * 8 + 8
+                right = (columns - min(columns // 4, 48) - 1) * 8
+                return crop(picture, left, 32, right, height - 32)
+
+            initial = live_region(capture('native-overview-initial'))
+            changed = False
+            for _ in range(12):
+                settle(.5)
+                if live_region(capture('native-overview-live')) != initial:
+                    changed = True
+                    break
+            assert changed, 'Live state did not refresh without input'
+            console_command('p', b'autonomy pause changed')
+            press('esc')
+            paused = live_region(capture('native-overview-paused'))
+            settle(2)
+            assert live_region(capture('native-overview-paused-stable')) == paused, 'Paused view kept changing'
+            start = action('world toggle')
+            wait(b'world experiment toggled', start, 8)
+            press('esc')
+            console_command('p', b'autonomy pause changed')
+            press('esc')
+            settle(2)
+            capture('native-overview-predictions')
+            start = console_command('D', b'world enabled/rule/steps/phase-steps/action:')
+            wait(b'prediction/observed/error:', start, 8)
+            found = re.search(rb'world enabled/rule/steps/phase-steps/action: 1/\d+/(\d+)/', transcript[start:])
+            assert found and int(found.group(1)) > 0, bytes(transcript[start:])
+            press('esc')
+            start = action('source open 231')
+            wait(b'SOURCE:', start, 15)
+            press('ctrl', 'e')
+            type_text(' ')
+            before = info()
+            assert before[0][3] == 1, 'Test edit was not marked unsaved'
+            press('meta_l', '1')
+            type_text('probe')
+            press('esc')
+            assert info() == before, 'Overview input altered the source draft'
+            press('esc')
+            capture('native-overview-unsaved')
+            # Palette commands and global keys use the same layout selection.
+            start = action('layout editor')
+            wait(b'SOURCE:', start, 8)
+            assert info() == before
+            press('meta_l', '3')
+            press('meta_l', '2')
+            assert info() == before, 'Layout switch lost the editor context'
+            press('ctrl', 'z')
+            after_undo = info()
+            undone, _ = after_undo
+            assert undone[0] == before[0][0] - 1, 'Layout switch lost Undo'
+            capture('native-overview-editor-return')
+            action('console input')
+            type_text(':l')
+            start = len(transcript)
+            press('ret')
+            wait(b'ready> ', start, 8)
+            console_command('l', b'ready> ')
+            type_text('probe')
+            press('esc')
+            assert info() == after_undo, 'Legacy layout cycle left the hidden editor focused'
+            assert b'LIVE | computation' not in transcript, 'Overview polluted the console log'
+            print('PASS: live overview refresh, pause, prediction experiment, source opening, global/palette layouts, draft/cursor/Undo preservation and input isolation')
+            qmp('quit')
+            assert process.wait(timeout=5) == 0
+            sys.exit(0)
         if '--editing-only' in sys.argv:
             original = (image / 'source.mira').read_bytes()
             prefix = re.search(rb'(?m)^([ ]*)layout @231', original).group(1).decode()

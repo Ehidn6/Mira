@@ -442,7 +442,7 @@ editor @189 (value:i64)->unit =
   open @187 ()->unit =
     d = cells.document()
     if d.address > 0 and d.ascii
-      if cells.parent.workspace.console().layout == 2
+      if cells.parent.workspace.console().layout != 1
         cells.parent.workspace.console().layout = 1
         cells.parent.workspace.console().frame_dirty = true
       d.editing = true
@@ -457,6 +457,7 @@ editor @189 (value:i64)->unit =
 
   // Resolve the selected runtime cell to its existing definition identity.
   // The source remains one draft, never a copied per-cell program.
+
   parts @288 (id:i64)->bool =
     d = cells.document()
     c = cells.parent.workspace.console()

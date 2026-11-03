@@ -1,0 +1,76 @@
+  overview @437 ()->unit =
+    c = cells.parent.workspace.console()
+    if c.video and c.layout == 0 and not c.palette_open
+      old_x = c.x
+      old_y = c.y
+      old_region = c.output_region
+      for row in 32..c.editor_bottom * 16
+        sys.memory_fill(sys.offset(sys.addr(c.framebuffer),row * c.stride + c.source_left * 32),0,(c.source_right - c.source_left) * 32)
+      title = text(Text("LIVE | computation, learning and experience"),c.source_left + 1,2,color(101,203,214))
+      c.output_region = 4
+      c.x = c.source_left + 1
+      c.y = 4
+      s = cells.parent.neural.dynamics.state()
+      d = cells.parent.editor.document()
+      disk = cells.parent.storage.state()
+      cells.parent.workspace.write(s.quarantined ? Text("NEURAL: quarantined; commands remain available\n") : (s.paused ? Text("NEURAL: paused\n") : Text("NEURAL: running (cooperative CPU execution)\n")))
+      count(Text("Execution steps: "),s.steps)
+      count(Text("Observations: "),s.observations)
+      count(Text("Weight updates: "),s.updates)
+      count(Text("Experience replays: "),s.replays)
+      count(Text("Associative recalls: "),s.recalls)
+      cells.parent.workspace.write(Text("Input queued / dropped: "))
+      cells.parent.workspace.number(s.event_count)
+      cells.parent.workspace.put(47)
+      cells.parent.workspace.number(s.dropped)
+      cells.parent.workspace.write(Text("\n\nPREDICTION EXPERIMENT\n"))
+      if s.world_enabled
+        count(Text("Steps in this phase: "),s.world_phase_steps)
+        count(Text("Chosen action (0..3): "),s.world_action)
+        cells.parent.workspace.write(Text("Predicted / observed: "))
+        cells.parent.workspace.fixed(s.world_prediction)
+        cells.parent.workspace.put(47)
+        cells.parent.workspace.fixed(s.world_actual)
+        cells.parent.workspace.put(10)
+        cells.parent.workspace.write(Text("Squared error first16 / recent: "))
+        cells.parent.workspace.fixed(s.world_first)
+        cells.parent.workspace.put(47)
+        cells.parent.workspace.fixed(s.world_recent)
+        cells.parent.workspace.put(10)
+      else
+        cells.parent.workspace.write(Text("Off. Alt+X world toggle starts the existing experiment.\n"))
+      cells.parent.workspace.write(Text("\nRECENT EXPERIENCE | origin / subject / tick / error\n"))
+      meta = cells.parent.neural.memory.provenance()
+      memory = cells.parent.neural.memory.memory()
+      recent = s.memory_count < 3 ? s.memory_count : 3
+      if recent == 0
+        cells.parent.workspace.write(Text("No episodes yet.\n"))
+      for index in 0..recent
+        row = (s.memory_next + 32 - recent + index) % 32
+        origin = meta[row * 4]
+        cells.parent.workspace.write(origin == 0 ? Text("self ") : (origin == 1 ? Text("input ") : (origin == 2 ? Text("world ") : Text("other "))))
+        cells.parent.workspace.number(meta[row * 4 + 1])
+        cells.parent.workspace.put(47)
+        cells.parent.workspace.number(meta[row * 4 + 2])
+        cells.parent.workspace.put(47)
+        cells.parent.workspace.fixed(memory[row * 37 + 36])
+        cells.parent.workspace.put(10)
+      cells.parent.workspace.write(Text("\nSTORAGE / SOURCE\n"))
+      cells.parent.workspace.write(not disk.bound ? Text("Disk: unavailable; state is only in RAM\n") : (disk.foreign ? Text("Disk: different build; checkpoint blocked\n") : (disk.failed ? Text("Disk: I/O failure\n") : Text("Disk: ready\n"))))
+      count(Text("Experience checkpoint: "),disk.generation)
+      count(Text("Source checkpoint: "),d.generation)
+      count(Text("Draft bytes: "),d.length)
+      cells.parent.workspace.write(d.dirty ? Text("Source: unsaved changes\n") : Text("Source: no unsaved changes\n"))
+      if d.blocked
+        cells.parent.workspace.write(Text("Source storage: blocked; inspect source info\n"))
+      cells.parent.workspace.write(Text("\nSuper+2 edit | Super+3 log | Alt+X commands\n"))
+      c.output_region = old_region
+      c.x = old_x
+      c.y = old_y
+
+    count @438 (label:Text,value:i64)->unit =
+      cells.parent.workspace.write(label)
+      cells.parent.workspace.number(value)
+      cells.parent.workspace.put(10)
+      cells.parent.keyboard.collect()
+

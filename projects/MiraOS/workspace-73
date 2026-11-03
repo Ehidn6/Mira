@@ -241,7 +241,7 @@ workspace @73 ()->unit =
       cells.console().frame_dirty = true
       if layout == 1
         cells.parent.editor.open()
-      else if layout == 2
+      else
         cells.parent.editor.document().editing = false
       cells.parent.editor.document().redraw = true
 

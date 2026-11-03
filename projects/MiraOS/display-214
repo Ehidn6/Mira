@@ -1,7 +1,7 @@
 display @214 ()->unit =
   c = cells.parent.workspace.console()
   d = cells.parent.editor.document()
-  if c.video and c.layout != 2
+  if c.video and c.layout == 1
     caret_line = 0
     caret_column = 0
     if d.cursor > (d.scope_start + d.scope_end) / 2
@@ -64,7 +64,7 @@ display @214 ()->unit =
       index = end + 1
     d.redraw = false
 
-
+  // A view of the existing live state; no second log, model or memory store.
   struct Console @29 :
     serial: bool
     video: bool
@@ -188,6 +188,11 @@ display @214 ()->unit =
       else if c.output_region == 3
         top = 0
         bottom = 1
+      else if c.output_region == 4
+        left = c.source_left + 1
+        right = c.source_right - 1
+        top = 4
+        bottom = c.editor_bottom
       if code == 10
         c.x = left
         c.y += 1

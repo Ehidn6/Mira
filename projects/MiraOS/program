@@ -1,4 +1,4 @@
-identities 437
+identities 439
 
 
 // Native autonomous neural graph. One BSP; bounded steps; optional disk checkpoints.
@@ -55,6 +55,8 @@ boot @164 ()->unit =
       sys.scratch(cells.display,37000)
     if cells.workspace.console().dirty
       cells.workspace.console().dirty = false
+      if cells.workspace.console().layout == 0 and not cells.workspace.console().palette_open
+        sys.scratch(cells.display.overview,32768)
       sys.scratch(cells.display.status,6144)
     if cells.workspace.console().palette_open and cells.workspace.console().palette_dirty
       sys.scratch(cells.workspace.palette.draw,32768)
