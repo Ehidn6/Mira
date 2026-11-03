@@ -70,8 +70,11 @@
       c.y = old_y
 
     count @438 (label:Text,value:i64)->unit =
-      cells.parent.workspace.write(label)
-      cells.parent.workspace.number(value)
-      cells.parent.workspace.put(10)
+      c = cells.parent.workspace.console()
+      value_text = widgets.integer_field(label,value,Text())
+      view = WidgetView(c.source_left + 1,c.y,c.source_right - c.source_left - 2,1,0xc8dae5,0)
+      paint(c,view,value_text)
+      c.y += 1
+      c.x = c.source_left + 1
       cells.parent.keyboard.collect()
 

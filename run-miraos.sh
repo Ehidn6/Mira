@@ -34,9 +34,9 @@ case "${1:-}" in
     python3 tools/prepare-miraos.py
     if [ "${1:-}" = --screen ]; then
       printf 'Click the QEMU screen to type through its USB keyboard. :b edits; Ctrl+S saves; Ctrl+X returns. This terminal remains a fallback.\n'
-      target/debug/mira boot-uefi target/miraos/esp
+      target/release/mira boot-uefi target/miraos/esp
     else
-      target/debug/mira boot-uefi target/miraos/esp --headless
+      target/release/mira boot-uefi target/miraos/esp --headless
     fi
     ;;
 esac

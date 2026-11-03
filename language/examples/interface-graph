@@ -1,0 +1,33 @@
+// Composition in the shared widgets definition context (see README).
+// Geometry is data; formatting remains open Mira code.
+caption()->Text = Text("Count: ")
+number()->i64 = -42
+style()->WidgetView = WidgetView(3,5,24,1,0x65cbd6,0)
+buffer()->Text = Text()
+verify(view:WidgetView,field:Text,heading:Text)->i64 =
+  ok = view.column == 3 and view.line == 5 and view.width == 24
+  ok = ok and view.foreground == 0x65cbd6 and heading[0] == 67
+  ok = ok and field[0] == 67 and field[7] == 45
+  ok = ok and field[8] == 52 and field[9] == 50 and field[10] == 0
+  // Reuse only this field's buffer; the heading keeps its own text.
+  shortened = widgets.integer_field(Text(""),0,field)
+  ok = ok and shortened[0] == 48 and shortened[1] == 0
+  ok = ok and shortened[9] == 0 and heading[0] == 67
+  ok ? 1 : 0
+space Interface:
+  title = caption()
+  value = number()
+  appearance = style()
+  field_buffer = buffer()
+  heading_buffer = buffer()
+  field = widgets.integer_field()
+  heading = widgets.text_block()
+  result = verify()
+  title.out -> field.label
+  value.out -> field.value
+  field_buffer.out -> field.output
+  title.out -> heading.value
+  heading_buffer.out -> heading.output
+  appearance.out -> result.view
+  field.out -> result.field
+  heading.out -> result.heading

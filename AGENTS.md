@@ -6,7 +6,7 @@
 
 projects/MiraOS — единый source_tree/index, рекурсивный контейнер исходников. Физическая упаковка, CodeModule.locals (определения) и Z-пространства экземпляров — разные уровни. Файл не равен ячейке. Нет обязательных расширений, use/import, System Element или второго Program/Store. Имена/лексическая видимость/порты сохраняются. cells.component.operation связывает операцию с экземпляром; cells.parent и graph.parent явно обращаются к родителю. Не заменять композицию перегруппировкой текста.
 
-После cargo build -q -p mira-lang использовать target/debug/mira:
+Для повторной публикации/сборки предпочитать cargo build -q --offline --release -p mira-lang --bin mira и target/release/mira (debug заметно медленнее). Следующие операции одинаковы в обоих профилях:
 
 - source projects/MiraOS files / find NAME — карта без кода;
 - source projects/MiraOS list ID [AFTER] / read ID — только нужный объект;
@@ -43,6 +43,6 @@ Tensor/relation семантику сверять с tensor.rs и примера
 
 Editor/source staging512KiB выделяются из hardware.physical_allocate после hardware.init, не activation stack. storage.volume_sectors едина для PCI discovery/драйвера. Source MIRASRC3 banks1283/2308, MIRAVOL2 disk2MiB; расширять можно только известный1MiB volume с сохранением префикса, чужие файлы не менять. Neural checkpoint v2, State40 слов, origin2=world; старые payload не мигрировать.
 
-Редактор Alt+X source open NAME/ID, parent/children/project работает над той же проекцией с границами/Undo/save. Это не поштучная загрузка Linux-файлов и не полный native compiler. Последний UI сценарий — tools/test-miraos-object-navigation.py; текущие изменения не объявлять заново проверенными на основании прежнего прогона. Обзор Super+1 — display.overview @437 в overview-437: только существующие данные, output_region4, без serial/log. Super+2 — исходник; select @221 задаёт единый фокус, в том числе для :l. Целевой UI сценарий — --overview-only.
+Редактор Alt+X source open NAME/ID, parent/children/project работает над той же проекцией с границами/Undo/save. Это не поштучная загрузка Linux-файлов и не полный native compiler. Последний UI сценарий — tools/test-miraos-object-navigation.py; текущие изменения не объявлять заново проверенными на основании прежнего прогона. Обзор Super+1 — display.overview @437 в overview: только существующие данные, output_region4, без serial/log. Super+2 — исходник; select @221 задаёт единый фокус, в том числе для :l. Целевой UI сценарий — --overview-only. Первый UI-набор — widgets (WidgetView/text_block/integer_field/paint), пример language/examples/interface-graph и целевой language_examples тест, который читает настоящие определения из source tree. Палитра собирает строки в scratch4096 и использует тот же paint; dirty footer не инвалидирует палитру. Физические исходники без числовых суффиксов, ID сохраняются в index/объявлениях.
 
 Cognition.discover использует прежние activity/head/learning/memory, не отдельную модель; :t/:T/:D и world commands. Rule/hidden не входят в признаки, прогноз до результата. First16/recent-EWMA не доказывают перенос знаний. Память опыта, UOG/Inspect и reflect.rule_* не удалять/не дублировать системой заметок. Политические/биологические метафоры — не спецификация и не идеология пользователя.

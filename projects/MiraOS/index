@@ -896,6 +896,24 @@
                         "content": "",
                         "children": []
                       }
+                    },
+                    {
+                      "offset": 35,
+                      "element": {
+                        "id": 446,
+                        "name": "draw_row",
+                        "content": "",
+                        "children": []
+                      }
+                    },
+                    {
+                      "offset": 35,
+                      "element": {
+                        "id": 447,
+                        "name": "PaletteChoices",
+                        "content": "",
+                        "children": []
+                      }
                     }
                   ]
                 }
@@ -2288,6 +2306,70 @@
                       }
                     }
                   ]
+                }
+              },
+              {
+                "offset": 2551,
+                "element": {
+                  "id": 440,
+                  "name": "WidgetView",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 2551,
+                "element": {
+                  "id": 439,
+                  "name": "widgets",
+                  "content": "",
+                  "children": [
+                    {
+                      "offset": 116,
+                      "element": {
+                        "id": 441,
+                        "name": "text_block",
+                        "content": "",
+                        "children": []
+                      }
+                    },
+                    {
+                      "offset": 116,
+                      "element": {
+                        "id": 442,
+                        "name": "integer_field",
+                        "content": "",
+                        "children": []
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "offset": 2551,
+                "element": {
+                  "id": 443,
+                  "name": "paint",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 2551,
+                "element": {
+                  "id": 444,
+                  "name": "glyph_on",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 2551,
+                "element": {
+                  "id": 445,
+                  "name": "WidgetDigits",
+                  "content": "",
+                  "children": []
                 }
               }
             ]
@@ -3979,18 +4061,18 @@
         {
           "id": 164,
           "offset": 226,
-          "length": 2649
+          "length": 2614
         },
         {
           "id": 100,
-          "offset": 2875,
+          "offset": 2840,
           "length": 24
         }
       ]
     },
     {
       "content": "",
-      "name": "neural-63",
+      "name": "neural",
       "ranges": [
         {
           "id": 63,
@@ -4336,7 +4418,7 @@
     },
     {
       "content": "",
-      "name": "storage-69",
+      "name": "storage",
       "ranges": [
         {
           "id": 69,
@@ -4462,7 +4544,7 @@
     },
     {
       "content": "",
-      "name": "disk_start-148",
+      "name": "disk_start",
       "ranges": [
         {
           "id": 148,
@@ -4483,7 +4565,7 @@
     },
     {
       "content": "",
-      "name": "load-161",
+      "name": "load",
       "ranges": [
         {
           "id": 161,
@@ -4514,7 +4596,7 @@
     },
     {
       "content": "",
-      "name": "workspace-73",
+      "name": "workspace",
       "ranges": [
         {
           "id": 73,
@@ -4605,7 +4687,7 @@
     },
     {
       "content": "",
-      "name": "palette-229",
+      "name": "palette",
       "ranges": [
         {
           "id": 229,
@@ -4650,13 +4732,23 @@
         {
           "id": 230,
           "offset": 9037,
-          "length": 1929
+          "length": 855
+        },
+        {
+          "id": 446,
+          "offset": 9892,
+          "length": 1563
+        },
+        {
+          "id": 447,
+          "offset": 11455,
+          "length": 40
         }
       ]
     },
     {
       "content": "",
-      "name": "frame-232",
+      "name": "frame",
       "ranges": [
         {
           "id": 232,
@@ -4677,7 +4769,7 @@
     },
     {
       "content": "",
-      "name": "sidebars-235",
+      "name": "sidebars",
       "ranges": [
         {
           "id": 235,
@@ -4698,7 +4790,7 @@
     },
     {
       "content": "",
-      "name": "browse-247",
+      "name": "browse",
       "ranges": [
         {
           "id": 247,
@@ -4764,7 +4856,7 @@
     },
     {
       "content": "",
-      "name": "hardware-88",
+      "name": "hardware",
       "ranges": [
         {
           "id": 88,
@@ -4825,7 +4917,7 @@
     },
     {
       "content": "",
-      "name": "scan-78",
+      "name": "scan",
       "ranges": [
         {
           "id": 78,
@@ -4846,7 +4938,7 @@
     },
     {
       "content": "",
-      "name": "mmio_map-84",
+      "name": "mmio_map",
       "ranges": [
         {
           "id": 84,
@@ -4872,7 +4964,7 @@
     },
     {
       "content": "",
-      "name": "usb-99",
+      "name": "usb",
       "ranges": [
         {
           "id": 99,
@@ -4938,7 +5030,7 @@
     },
     {
       "content": "",
-      "name": "start-97",
+      "name": "start",
       "ranges": [
         {
           "id": 97,
@@ -4969,7 +5061,7 @@
     },
     {
       "content": "",
-      "name": "keyboard-141",
+      "name": "keyboard",
       "ranges": [
         {
           "id": 141,
@@ -5045,7 +5137,7 @@
     },
     {
       "content": "",
-      "name": "press-138",
+      "name": "press",
       "ranges": [
         {
           "id": 138,
@@ -5071,7 +5163,7 @@
     },
     {
       "content": "",
-      "name": "editor-189",
+      "name": "editor",
       "ranges": [
         {
           "id": 189,
@@ -5247,7 +5339,7 @@
     },
     {
       "content": "",
-      "name": "command-181",
+      "name": "command",
       "ranges": [
         {
           "id": 181,
@@ -5298,7 +5390,7 @@
     },
     {
       "content": "",
-      "name": "source_storage-195",
+      "name": "source_storage",
       "ranges": [
         {
           "id": 195,
@@ -5349,7 +5441,7 @@
     },
     {
       "content": "",
-      "name": "source_analysis-200",
+      "name": "source_analysis",
       "ranges": [
         {
           "id": 200,
@@ -5395,7 +5487,7 @@
     },
     {
       "content": "",
-      "name": "display-214",
+      "name": "display",
       "ranges": [
         {
           "id": 214,
@@ -5430,53 +5522,53 @@
         {
           "id": 205,
           "offset": 3743,
-          "length": 924
+          "length": 163
         },
         {
           "id": 207,
-          "offset": 4667,
+          "offset": 3906,
           "length": 207
         },
         {
           "id": 208,
-          "offset": 4874,
+          "offset": 4113,
           "length": 1575
         },
         {
           "id": 210,
-          "offset": 6449,
+          "offset": 5688,
           "length": 1520
         },
         {
           "id": 209,
-          "offset": 7969,
+          "offset": 7208,
           "length": 477
         },
         {
           "id": 217,
-          "offset": 8446,
+          "offset": 7685,
           "length": 1724
         },
         {
           "id": 218,
-          "offset": 10170,
+          "offset": 9409,
           "length": 49
         },
         {
           "id": 219,
-          "offset": 10219,
+          "offset": 9458,
           "length": 356
         },
         {
           "id": 287,
-          "offset": 10575,
+          "offset": 9814,
           "length": 31
         }
       ]
     },
     {
       "content": "",
-      "name": "draw_line-213",
+      "name": "draw_line",
       "ranges": [
         {
           "id": 213,
@@ -5497,7 +5589,7 @@
     },
     {
       "content": "",
-      "name": "Runtime-101",
+      "name": "Runtime",
       "ranges": [
         {
           "id": 101,
@@ -6204,7 +6296,7 @@
     },
     {
       "content": "",
-      "name": "discover-398",
+      "name": "discover",
       "ranges": [
         {
           "id": 398,
@@ -6230,7 +6322,7 @@
     },
     {
       "content": "",
-      "name": "runner-423",
+      "name": "runner",
       "ranges": [
         {
           "id": 423,
@@ -6281,7 +6373,7 @@
     },
     {
       "content": "",
-      "name": "indentation-433",
+      "name": "indentation",
       "ranges": [
         {
           "id": 432,
@@ -6312,7 +6404,7 @@
     },
     {
       "content": "",
-      "name": "overview-437",
+      "name": "overview",
       "ranges": [
         {
           "id": 437,
@@ -6322,7 +6414,48 @@
         {
           "id": 438,
           "offset": 4059,
-          "length": 207
+          "length": 360
+        }
+      ]
+    },
+    {
+      "content": "",
+      "name": "widgets",
+      "ranges": [
+        {
+          "id": 440,
+          "offset": 0,
+          "length": 128
+        },
+        {
+          "id": 439,
+          "offset": 128,
+          "length": 116
+        },
+        {
+          "id": 441,
+          "offset": 244,
+          "length": 268
+        },
+        {
+          "id": 442,
+          "offset": 512,
+          "length": 831
+        },
+        {
+          "id": 443,
+          "offset": 1343,
+          "length": 1172
+        },
+        {
+          "id": 444,
+          "offset": 2515,
+          "length": 861
+        },
+        {
+          "id": 445,
+          "offset": 3376,
+          "length": 37
         }
       ]
     }

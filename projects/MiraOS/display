@@ -118,23 +118,7 @@ display @214 ()->unit =
     end
 
     glyph @205 (code:i64,column:i64,line:i64,color:i64,background:i64)->unit =
-      c = cells.parent.workspace.console()
-      if c.video and column >= 0 and column < c.columns and line >= 0 and line < c.rows
-        character = code >= 32 and code < 127 ? code : 63
-        font = sys.offset(sys.addr(c.font),character * 8)
-        base = sys.offset(sys.addr(c.framebuffer),line * 16 * c.stride + column * 32)
-        stride = c.stride
-        for row in 0..8
-          bits = sys.load8(sys.offset(font,row))
-          scan = sys.offset(base,row * 2 * stride)
-          for pixel in 0..8
-            value = ((bits >> pixel) & 1) == 1 ? color : background
-            upper = sys.offset(scan,pixel * 4)
-            lower = sys.offset(scan,stride + pixel * 4)
-            if sys.load32(upper) != value
-              sys.store32(upper,value)
-            if sys.load32(lower) != value
-              sys.store32(lower,value)
+      glyph_on(cells.parent.workspace.console(),code,column,line,color,background)
 
   number @207 (value:i64,column:i64,line:i64,color:i64)->i64 =
     end = column

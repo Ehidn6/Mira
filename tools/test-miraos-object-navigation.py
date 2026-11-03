@@ -257,6 +257,35 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
                     previous_view = view
                 samples += 1
             assert refreshes >= 2, 'Did not observe live refreshes during the flicker check'
+            press('alt', 'x')
+            palette_left = (columns - 76) // 2 if columns > 78 else 1
+            # The initial source-index scan may finish after the key release.
+            # Do not mistake two unchanged pre-overlay frames for a ready menu.
+            ready_until = time.monotonic() + 15
+            while True:
+                candidate = picture('native-palette-opening')
+                corner = crop(candidate, palette_left * 8, 4 * 16,
+                              palette_left * 8 + 1, 4 * 16 + 1)
+                if corner == bytes((25, 40, 42)):
+                    break
+                assert time.monotonic() < ready_until, 'Palette did not open'
+                settle(.1)
+            palette = capture('native-palette-steady')
+            palette_box = ((palette_left + 1) * 8, 4 * 16,
+                           (palette_left + 11) * 8, 5 * 16)
+            palette_heading = crop(palette, *palette_box)
+            assert any(palette_heading)
+            for _ in range(40):
+                settle(.05)
+                assert crop(picture('native-palette-intermediate'), *palette_box) == palette_heading, 'Palette title blinked during background activity'
+            for char in 'layout ed':
+                type_text(char)
+                assert crop(picture('native-palette-typing'), *palette_box) == palette_heading, 'Palette title blinked while filtering commands'
+            start = len(transcript)
+            press('ret')
+            wait(b'SOURCE:', start, 8)
+            press('meta_l', '1')
+            press('esc')
             console_command('p', b'autonomy pause changed')
             press('esc')
             paused = live_region(capture('native-overview-paused'))
@@ -315,7 +344,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             press('esc')
             assert info() == after_undo, 'Legacy layout cycle left the hidden editor focused'
             assert b'LIVE | computation' not in transcript, 'Overview polluted the console log'
-            print(f'PASS: overview refresh and pause, steady heading/footer across {samples} intermediate frames ({refreshes} changes), shorter-view cleanup, prediction experiment, layouts and draft/cursor/Undo preservation')
+            print(f'PASS: overview refresh and pause, steady heading/footer across {samples} intermediate frames ({refreshes} changes), palette stability across 40 frames and filtering, shorter-view cleanup, prediction experiment, layouts and draft/cursor/Undo preservation')
             qmp('quit')
             assert process.wait(timeout=5) == 0
             sys.exit(0)

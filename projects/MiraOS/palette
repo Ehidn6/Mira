@@ -166,31 +166,57 @@
       c = cells.console()
       if c.video
         left = c.columns > 78 ? (c.columns - 76) / 2 : 1
-        top = 4
         width = c.columns > 78 ? 76 : c.columns - 2
-        white = cells.parent.display.color(225,235,230)
-        accent = cells.parent.display.color(101,203,214)
-        for row in top..top + 17
-          for column in left..left + width
-            cells.parent.display.text.glyph(32,column,row,white,cells.parent.display.color(25,40,42))
-        end = cells.parent.display.text(c.palette_input ? Text("INPUT | Enter submit | Esc cancel") : Text("COMMANDS | Alt+X / Esc close | Tab complete"),left + 1,top,accent)
-        end = cells.parent.display.text(cells.query(),left + 1,top + 2,white)
+        choices = PaletteChoices()
+        for index in 0..5
+          choices[index] = -1
         first = (c.palette_selected / 5) * 5
         row = 0
         for index in 0..(c.palette_input ? 0 : 26 + (cells.parent.editor.parts.rebuild() ? cells.parent.editor.document().part_count : 0))
           if match(index)
             if row >= first and row < first + 5
-              line = top + 4 + (row - first) * 2
-              cells.parent.display.text.glyph(row == c.palette_selected ? 62 : 32,left + 1,line,accent,0)
-              end = cells.parent.display.text(name(index),left + 3,line,white)
-              end = cells.parent.display.text(description(index),left + 3,line + 1,accent)
+              choices[row - first] = index
             row += 1
-        if c.palette_input
-          end = cells.parent.display.text(Text("Text becomes a neural input event. Prefix : for a system command."),left + 1,top + 4,white)
-          end = cells.parent.display.text(Text("Case is preserved. Nothing is sent until Enter."),left + 1,top + 6,accent)
-        else
-          if row == 0
-            end = cells.parent.display.text(Text("No matching commands"),left + 1,top + 4,white)
-          end = cells.parent.display.text(Text("Ctrl+P/N or Up/Down select | Enter execute"),left + 1,top + 15,accent)
+        for relative in 0..17
+          sys.scratch(draw_row,4096,c,choices,relative,left,width)
+          cells.parent.keyboard.collect()
       c.palette_dirty = false
+
+    // Compose each final row before painting it. No intermediate blank frame.
+    draw_row @446 (surface:Console,choices:PaletteChoices,relative:i64,left:i64,width:i64)->unit =
+      content = Text()
+      for index in 0..96
+        content[index] = 32
+      label = Text()
+      offset = 1
+      accent = relative == 0 or relative == 15
+      if relative == 0
+        label = surface.palette_input ? Text("INPUT | Enter submit | Esc cancel") : Text("COMMANDS | Alt+X / Esc close | Tab complete")
+      else if relative == 2
+        label = cells.query()
+      else if surface.palette_input
+        if relative == 4
+          label = Text("Text becomes a neural input event. Prefix : for a system command.")
+        else if relative == 6
+          label = Text("Case is preserved. Nothing is sent until Enter.")
+      else if relative >= 4 and relative < 14
+        index = choices[(relative - 4) / 2]
+        if index >= 0
+          offset = 3
+          description_row = relative % 2 == 1
+          accent = description_row
+          label = description_row ? description(index) : name(index)
+          if not description_row and (relative - 4) / 2 == surface.palette_selected % 5
+            content[1] = 62
+        else if relative == 4
+          label = Text("No matching commands")
+      else if relative == 15
+        label = Text("Ctrl+P/N or Up/Down select | Enter execute")
+      for index in 0..96 - offset
+        if label[index] != 0
+          content[index + offset] = label[index]
+      view = WidgetView(left,4 + relative,width,1,accent ? 0x65cbd6 : 0xe1ebe6,0x19282a)
+      cells.parent.display.paint(surface,view,content)
+
+    type PaletteChoices @447 = [i64,5]
 

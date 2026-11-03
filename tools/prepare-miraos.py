@@ -24,8 +24,8 @@ def main():
     if sys.argv[1:] not in ([], ['--rebuild']):
         raise SystemExit('usage: prepare-miraos.py [--rebuild]')
     # Cargo tracks embedded compiler/boot assets as well as Rust dependencies.
-    subprocess.run(['cargo', 'build', '--quiet', '--offline', '-p', 'mira-lang', '--bin', 'mira'], cwd=root, check=True)
-    binary = root / 'target/debug/mira'
+    subprocess.run(['cargo', 'build', '--quiet', '--offline', '--release', '-p', 'mira-lang', '--bin', 'mira'], cwd=root, check=True)
+    binary = root / 'target/release/mira'
     inputs = {'compiler': digest(binary)}
     for path in sorted((root / 'projects/MiraOS').rglob('*')):
         if path.is_file():
