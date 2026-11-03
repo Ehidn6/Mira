@@ -1847,6 +1847,51 @@
                     }
                   ]
                 }
+              },
+              {
+                "offset": 3245,
+                "element": {
+                  "id": 432,
+                  "name": "newline",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 3245,
+                "element": {
+                  "id": 433,
+                  "name": "indent",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 3245,
+                "element": {
+                  "id": 434,
+                  "name": "line_extra",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 3245,
+                "element": {
+                  "id": 435,
+                  "name": "indent_insert",
+                  "content": "",
+                  "children": []
+                }
+              },
+              {
+                "offset": 3245,
+                "element": {
+                  "id": 436,
+                  "name": "indent_remove",
+                  "content": "",
+                  "children": []
+                }
               }
             ]
           }
@@ -4485,56 +4530,56 @@
         {
           "id": 66,
           "offset": 1808,
-          "length": 2024
+          "length": 2224
         },
         {
           "id": 70,
-          "offset": 3832,
+          "offset": 4032,
           "length": 356
         },
         {
           "id": 74,
-          "offset": 4188,
+          "offset": 4388,
           "length": 1184
         },
         {
           "id": 72,
-          "offset": 5372,
+          "offset": 5572,
           "length": 4783
         },
         {
           "id": 203,
-          "offset": 10155,
+          "offset": 10355,
           "length": 40
         },
         {
           "id": 221,
-          "offset": 10195,
+          "offset": 10395,
           "length": 338
         },
         {
           "id": 281,
-          "offset": 10533,
+          "offset": 10733,
           "length": 36
         },
         {
           "id": 282,
-          "offset": 10569,
+          "offset": 10769,
           "length": 30
         },
         {
           "id": 120,
-          "offset": 10599,
+          "offset": 10799,
           "length": 41
         },
         {
           "id": 122,
-          "offset": 10640,
+          "offset": 10840,
           "length": 42
         },
         {
           "id": 126,
-          "offset": 10682,
+          "offset": 10882,
           "length": 41
         }
       ]
@@ -4910,71 +4955,71 @@
         {
           "id": 141,
           "offset": 0,
-          "length": 1640
+          "length": 1639
         },
         {
           "id": 20,
-          "offset": 1640,
+          "offset": 1639,
           "length": 725
         },
         {
           "id": 127,
-          "offset": 2365,
+          "offset": 2364,
           "length": 48
         },
         {
           "id": 133,
-          "offset": 2413,
+          "offset": 2412,
           "length": 5498
         },
         {
           "id": 132,
-          "offset": 7911,
+          "offset": 7910,
           "length": 1345
         },
         {
           "id": 131,
-          "offset": 9256,
+          "offset": 9255,
           "length": 1009
         },
         {
           "id": 134,
-          "offset": 10265,
+          "offset": 10264,
           "length": 408
         },
         {
           "id": 135,
-          "offset": 10673,
+          "offset": 10672,
           "length": 723
         },
         {
           "id": 139,
-          "offset": 11396,
+          "offset": 11395,
           "length": 857
         },
         {
           "id": 140,
-          "offset": 12253,
+          "offset": 12252,
           "length": 692
         },
         {
           "id": 142,
-          "offset": 12945,
+          "offset": 12944,
           "length": 719
         },
         {
           "id": 273,
-          "offset": 13664,
+          "offset": 13663,
           "length": 34
         },
         {
           "id": 274,
-          "offset": 13698,
+          "offset": 13697,
           "length": 29
         },
         {
           "id": 125,
-          "offset": 13727,
+          "offset": 13726,
           "length": 40
         }
       ]
@@ -4986,21 +5031,21 @@
         {
           "id": 138,
           "offset": 0,
-          "length": 3454
+          "length": 3902
         },
         {
           "id": 130,
-          "offset": 3454,
+          "offset": 3902,
           "length": 81
         },
         {
           "id": 136,
-          "offset": 3535,
+          "offset": 3983,
           "length": 795
         },
         {
           "id": 137,
-          "offset": 4330,
+          "offset": 4778,
           "length": 397
         }
       ]
@@ -5012,171 +5057,171 @@
         {
           "id": 189,
           "offset": 0,
-          "length": 3377
+          "length": 3245
         },
         {
           "id": 24,
-          "offset": 3377,
+          "offset": 3245,
           "length": 39
         },
         {
           "id": 25,
-          "offset": 3416,
+          "offset": 3284,
           "length": 36
         },
         {
           "id": 26,
-          "offset": 3452,
+          "offset": 3320,
           "length": 1680
         },
         {
           "id": 165,
-          "offset": 5132,
+          "offset": 5000,
           "length": 63
         },
         {
           "id": 166,
-          "offset": 5195,
+          "offset": 5063,
           "length": 1488
         },
         {
           "id": 167,
-          "offset": 6683,
+          "offset": 6551,
           "length": 148
         },
         {
           "id": 168,
-          "offset": 6831,
+          "offset": 6699,
           "length": 135
         },
         {
           "id": 169,
-          "offset": 6966,
+          "offset": 6834,
           "length": 141
         },
         {
           "id": 170,
-          "offset": 7107,
+          "offset": 6975,
           "length": 234
         },
         {
           "id": 171,
-          "offset": 7341,
+          "offset": 7209,
           "length": 573
         },
         {
           "id": 173,
-          "offset": 7914,
+          "offset": 7782,
           "length": 294
         },
         {
           "id": 172,
-          "offset": 8208,
+          "offset": 8076,
           "length": 509
         },
         {
           "id": 175,
-          "offset": 8717,
+          "offset": 8585,
           "length": 253
         },
         {
           "id": 174,
-          "offset": 8970,
+          "offset": 8838,
           "length": 536
         },
         {
           "id": 176,
-          "offset": 9506,
-          "length": 799
+          "offset": 9374,
+          "length": 950
         },
         {
           "id": 178,
-          "offset": 10305,
+          "offset": 10324,
           "length": 2732
         },
         {
           "id": 177,
-          "offset": 13037,
+          "offset": 13056,
           "length": 234
         },
         {
           "id": 186,
-          "offset": 13271,
+          "offset": 13290,
           "length": 1278
         },
         {
           "id": 187,
-          "offset": 14549,
-          "length": 894
+          "offset": 14568,
+          "length": 895
         },
         {
           "id": 288,
-          "offset": 15443,
+          "offset": 15463,
           "length": 1768
         },
         {
           "id": 289,
-          "offset": 17211,
+          "offset": 17231,
           "length": 259
         },
         {
           "id": 290,
-          "offset": 17470,
+          "offset": 17490,
           "length": 253
         },
         {
           "id": 291,
-          "offset": 17723,
+          "offset": 17743,
           "length": 437
         },
         {
           "id": 292,
-          "offset": 18160,
+          "offset": 18180,
           "length": 1935
         },
         {
           "id": 293,
-          "offset": 20095,
+          "offset": 20115,
           "length": 1890
         },
         {
           "id": 294,
-          "offset": 21985,
+          "offset": 22005,
           "length": 204
         },
         {
           "id": 295,
-          "offset": 22189,
+          "offset": 22209,
           "length": 942
         },
         {
           "id": 296,
-          "offset": 23131,
+          "offset": 23151,
           "length": 593
         },
         {
           "id": 297,
-          "offset": 23724,
+          "offset": 23744,
           "length": 981
         },
         {
           "id": 298,
-          "offset": 24705,
+          "offset": 24725,
           "length": 190
         },
         {
           "id": 279,
-          "offset": 24895,
+          "offset": 24915,
           "length": 30
         },
         {
           "id": 280,
-          "offset": 24925,
+          "offset": 24945,
           "length": 27
         },
         {
           "id": 121,
-          "offset": 24952,
+          "offset": 24972,
           "length": 44
         }
       ]
@@ -5320,11 +5365,11 @@
         {
           "id": 201,
           "offset": 6791,
-          "length": 521
+          "length": 1305
         },
         {
           "id": 286,
-          "offset": 7312,
+          "offset": 8096,
           "length": 47
         }
       ]
@@ -6212,6 +6257,37 @@
           "id": 431,
           "offset": 15843,
           "length": 430
+        }
+      ]
+    },
+    {
+      "content": "",
+      "name": "indentation-433",
+      "ranges": [
+        {
+          "id": 432,
+          "offset": 0,
+          "length": 547
+        },
+        {
+          "id": 433,
+          "offset": 547,
+          "length": 1206
+        },
+        {
+          "id": 434,
+          "offset": 1753,
+          "length": 1602
+        },
+        {
+          "id": 435,
+          "offset": 3355,
+          "length": 615
+        },
+        {
+          "id": 436,
+          "offset": 3970,
+          "length": 637
         }
       ]
     }

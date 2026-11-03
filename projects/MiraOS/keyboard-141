@@ -23,7 +23,7 @@ keyboard @141 ()->unit =
           if not seen
             k.usage = usage
             k.key_modifiers = k.modifiers
-            sys.scratch(press,32768)
+            sys.scratch(press,36864)
             k.repeat_usage = 0
             if not cells.parent.editor.document().argument_active and not cells.parent.workspace.console().palette_open and press.repeat_allowed(usage,k.modifiers)
               k.repeat_usage = usage
@@ -42,7 +42,6 @@ keyboard @141 ()->unit =
         k.error = 5
         released = cells.parent.usb.command(10,k.slot,0)
         u.transfer_pending = 0
-
 
   struct Keyboard @20 :
     attempted: bool
@@ -311,7 +310,7 @@ keyboard @141 ()->unit =
         k.key_modifiers = k.repeat_modifiers
         k.repeat_tick = cells.parent.usb.ticks()
         k.repeat_wait = 400
-        sys.scratch(press,32768)
+        sys.scratch(press,36864)
 
   // Collect reports during painting without executing editor commands reentrantly.
   // The existing pinned 4 KiB report page also owns this bounded 32-report FIFO.

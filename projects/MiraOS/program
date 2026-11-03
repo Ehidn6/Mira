@@ -1,4 +1,4 @@
-identities 432
+identities 437
 
 
 // Native autonomous neural graph. One BSP; bounded steps; optional disk checkpoints.
@@ -34,7 +34,7 @@ boot @164 ()->unit =
     accepted = cells.keyboard.start()
     sys.scratch(cells.keyboard.report,2048)
   while true
-    sys.scratch(cells.workspace,16384)
+    sys.scratch(cells.workspace,49152)
     cells.storage()
     cells.source_storage()
     cells.hardware()

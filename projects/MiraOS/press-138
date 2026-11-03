@@ -20,6 +20,11 @@
       cells.parent.workspace.palette(usage == 41 ? 27 : (usage == 81 or usage == 17 ? 258 : 257))
     else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and usage == 44 and (mods & 17) != 0 and (mods & 204) == 0
       cells.parent.editor.region(0)
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and usage == 43 and (mods & 221) == 0
+      cells.parent.editor.indent((mods & 34) != 0)
+    else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and usage == 13 and (mods & 17) != 0 and (mods & 204) == 0
+      cells.parent.editor.document().skip_lf = false
+      cells.parent.editor.insert(10)
     else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and action > 0
       cells.parent.editor.command(action)
     else if not cells.parent.workspace.console().palette_open and cells.parent.editor.document().editing and (mods & 68) != 0 and (mods & 153) == 0 and usage == 26

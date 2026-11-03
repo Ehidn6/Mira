@@ -171,13 +171,28 @@ source_analysis @200 ()->unit =
 
   error_focus @201 ()->unit =
     d = cells.parent.editor.document()
-    if d.check_status >= 3 and d.check_revision == d.revision
-      if d.check_offset < d.scope_start or d.check_offset > d.scope_end
-        opened = cells.parent.editor.parts(reflect.root())
-      d.cursor = d.check_offset
+    offset = -1
+    if d.compile_status == 3 and d.compile_revision == d.revision and d.compile_error >= 1 and d.compile_error <= 12
+      offset = d.compile_error_offset
+    else if d.check_status >= 3 and d.check_revision == d.revision
+      offset = d.check_offset
+    if offset >= 0 and offset <= d.length
+      target = offset >= d.scope_start and offset <= d.scope_end ? d.scope_id : reflect.root()
+      if cells.parent.editor.parts.rebuild()
+        width = d.length + 1
+        for index in 1..d.part_count
+          start = cells.parent.editor.parts.get(index,2)
+          end = cells.parent.editor.parts.get(index,3)
+          if start <= offset and (offset < end or (offset == d.length and end == d.length)) and end - start < width
+            width = end - start
+            target = cells.parent.editor.parts.get(index,0)
+      if target != d.scope_id
+        opened = cells.parent.editor.parts(target)
+      d.cursor = offset < d.scope_start ? d.scope_start : (offset > d.scope_end ? d.scope_end : offset)
+      d.preferred_column = -1
+      d.mark_active = false
       cells.parent.editor.open()
     else
-      cells.parent.workspace.write(Text("No current source error; :v checks the current draft.\n"))
+      cells.parent.workspace.write(Text("No current error; use source compile or source check after editing.\n"))
 
-  // Workspace regions are views of this loaded program, not separate applications.
       source_analysis @286 = source_analysis()

@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
     transcript = bytearray()
     sock = None
     stream = None
-    deadline = time.monotonic() + (360 if '--linked-only' in sys.argv else 240)
+    deadline = time.monotonic() + (360 if any(mode in sys.argv for mode in ('--linked-only', '--editing-only')) else 240)
 
     def pump(seconds=.05):
         if time.monotonic() > deadline:
@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             qmp('input-send-event', {'events': [
                 {'type': 'key', 'data': {'down': down, 'key': {'type': 'qcode', 'data': key}}}
                 for key in ordered]})
-            settle(.12 if '--runner-only' in sys.argv or '--linked-only' in sys.argv else .07)
+            settle(.12 if any(mode in sys.argv for mode in ('--runner-only', '--linked-only', '--editing-only')) else .07)
 
     def console_command(letter, marker):
         start = len(transcript)
@@ -108,8 +108,8 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
         wait(marker, start, 8)
         return start
 
-    def report(start):
-        wait(b'ready> ', start, 8)
+    def report(start, ready=True):
+        wait(b'ready> ' if ready else b'source storage generation/restored/blocked/different-base:', start, 8)
         found = re.search(rb'source bytes/cursor/revision/dirty/full/rejected: (\d+)/(\d+)/(\d+)/(\d+)/(\d+)/(\d+)\r?\nsource line: ([^\r\n]*)', transcript[start:])
         if not found:
             raise AssertionError('Source report was missing or malformed')
@@ -152,11 +152,14 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
                         for row in range(y0, y1))
 
     def type_text(text):
-        punctuation = {' ': ('spc',), '\n': ('ret',), '_': ('shift', 'minus'),
+        # Scripted source already carries its indentation. Enter is exercised
+        # explicitly where automatic indentation is part of the scenario.
+        punctuation = {' ': ('spc',), '\n': ('ctrl', 'j'), '_': ('shift', 'minus'),
             '(': ('shift', '9'), ')': ('shift', '0'), ':': ('shift', 'semicolon'),
             '=': ('equal',), '.': ('dot',), '-': ('minus',), '>': ('shift', 'dot'), '/': ('slash',),
             '@': ('shift','2'), '*': ('shift','8'), '+': ('shift','equal'), ',': ('comma',),
-            '[': ('bracket_left',), ']': ('bracket_right',), ';': ('semicolon',)}
+            '[': ('bracket_left',), ']': ('bracket_right',), ';': ('semicolon',),
+            '"': ('shift', 'apostrophe')}
         for char in text:
             if char in punctuation:
                 press(*punctuation[char])
@@ -196,6 +199,136 @@ with tempfile.TemporaryDirectory(prefix='mira-object-navigation-') as directory:
             subprocess.run(['hyprctl', 'dispatch',
                 f'hl.dsp.focus({{window="address:{previous_focus}"}})'],
                 check=True, stdout=subprocess.DEVNULL, timeout=5)
+        if '--editing-only' in sys.argv:
+            original = (image / 'source.mira').read_bytes()
+            prefix = re.search(rb'(?m)^([ ]*)layout @231', original).group(1).decode()
+
+            def action(query):
+                press('alt', 'x')
+                type_text(query)
+                start = len(transcript)
+                press('ret')
+                return start
+
+            def open_id(identity):
+                start = action('source open ' + str(identity))
+                wait(b'SOURCE:', start, 15)
+
+            def replace_text(text):
+                press('alt', 'shift', 'comma')
+                press('ctrl', 'spc')
+                press('alt', 'shift', 'dot')
+                press('ctrl', 'w')
+                type_text(text)
+
+            def info(expected_line=None, identity=231):
+                start = action('source info')
+                values, line = report(start, ready=False)
+                assert re.search(('source object/parent/range: ' + str(identity) + r'/\d+/\d+/\d+').encode(), transcript[start:]), bytes(transcript[start:])
+                if expected_line is not None:
+                    assert line == expected_line.encode(), (line, expected_line)
+                return values
+
+            open_id(231)
+            header = prefix + 'layout @231()->i64 ='
+            # Keep a delimiter before the following object while typing at EOL.
+            replace_text(header + '\n')
+            press('ctrl', 'b')
+            before = info(header)
+            press('ret')
+            after = info(prefix + '  ')
+            assert after[0] - before[0] == len(prefix) + 3
+            press('ctrl', 'z')
+            undone = info(header)
+            assert undone[:2] == before[:2], (before, undone)
+            press('ret')
+            press('tab')
+            info(prefix + '    ')
+            press('ctrl', 'z')
+            info(prefix + '  ')
+            press('shift', 'tab')
+            info(prefix)
+            press('ctrl', 'z')
+            info(prefix + '  ')
+            type_text('if true')
+            press('ret')
+            info(prefix + '    ')
+            type_text('40 + 2')
+            press('ret')
+            info(prefix + '    ')
+            press('shift', 'tab')
+            type_text('else')
+            press('ret')
+            info(prefix + '    ')
+            type_text('0')
+            # Inserting/removing indentation keeps the active selected byte.
+            press('ctrl', 'spc')
+            press('ctrl', 'b')
+            press('tab')
+            press('shift', 'tab')
+            press('alt', 'w')
+            press('ctrl', 'e')
+            press('ctrl', 'y')
+            info(prefix + '    00')
+            press('ctrl', 'z')
+            info(prefix + '    0')
+            press('ctrl', 'j')
+            info('')
+            press('ctrl', 'z')
+            info(prefix + '    0')
+            # A comment ending in '=' is not a language block opener.
+            press('ret')
+            type_text('// =')
+            press('ret')
+            info(prefix + '    ')
+            type_text('"="')
+            press('ret')
+            info(prefix + '    ')
+            press('ctrl', 'z')
+            for _ in range(3):
+                press('ctrl', 'z')
+            info(prefix + '    ')
+            capture('native-editor-autoindent')
+            start = action('source run')
+            wait(b'RUN result: 42', start, 45)
+
+            # The reported error belongs to a sibling, not the current entry.
+            open_id(231)
+            replace_text(prefix + 'layout @231()->i64 = edit_helper()\n' +
+                         prefix + 'edit_helper @9001()->i64 = missing(7)\n')
+            open_id(231)
+            start = action('source run')
+            wait(b'COMPILE rejected:', start, 45)
+            diagnostic = b'error/absolute source byte: 2/'
+            wait(diagnostic, start, 8)
+            wait(b'\n', transcript.index(diagnostic, start) + len(diagnostic), 8)
+            found = re.search(rb'error/absolute source byte: 2/(\d+)\r?\n', transcript[start:])
+            assert found, bytes(transcript[start:])
+            error_offset = int(found.group(1))
+            before = info()
+            start = action('source error')
+            wait(b'SOURCE:', start, 15)
+            focused = info(prefix + 'edit_helper @9001()->i64 = missing(7)', 9001)
+            assert focused[1] == error_offset, (focused, error_offset)
+            assert (focused[0], focused[2:]) == (before[0], before[2:])
+            capture('native-editor-error-focus')
+            type_text('x')
+            start = action('source error')
+            wait(b'No current error;', start, 10)
+            assert info(identity=9001)[1] == error_offset + 1
+            # Existing lexical diagnostics remain navigable as well.
+            replace_text(prefix + 'edit_helper @9001()->i64 = (7\n')
+            start = action('source check')
+            wait(b'Unclosed bracket', start, 20)
+            start = action('source error')
+            wait(b'SOURCE:', start, 15)
+            focused = info(prefix + 'edit_helper @9001()->i64 = (7', 9001)
+            press('ctrl', 'f')
+            assert info(identity=9001)[1] == focused[1] + 1
+            print('PASS: Enter indentation, Tab/Shift+Tab, atomic Undo, selection, literal newline, comment lexing, native run and current compiler/lexical error focus')
+            qmp('quit')
+            assert process.wait(timeout=5) == 0
+            sys.exit(0)
         if '--linked-only' in sys.argv:
             original = (image / 'source.mira').read_bytes()
             prefix = re.search(rb'(?m)^([ ]*)layout @231',original).group(1).decode()

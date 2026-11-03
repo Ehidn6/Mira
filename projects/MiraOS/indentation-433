@@ -1,0 +1,132 @@
+  newline @432 ()->unit =
+    d = cells.document()
+    start = line_start(d.cursor)
+    if start < d.scope_start
+      start = d.scope_start
+    spaces = 0
+    while start + spaces < d.cursor and byte(start + spaces) == 32
+      spaces += 1
+    extra = sys.scratch(line_extra,35000,start,d.cursor)
+    amount = 1 + spaces + extra
+    if amount <= d.capacity - d.length
+      remember(2,d.cursor,amount,d.cursor)
+      inserted = indent_insert(d.cursor,amount,true)
+    else
+      d.full = true
+      cells.parent.workspace.console().dirty = true
+
+  indent @433 (backwards:bool)->unit =
+    d = cells.document()
+    start = line_start(d.cursor)
+    if start < d.scope_start
+      start = d.scope_start
+    leading = 0
+    while start + leading < d.scope_end and byte(start + leading) == 32
+      leading += 1
+    amount = backwards ? (leading < 2 ? leading : 2) : 2
+    cursor = d.cursor
+    mark = d.mark
+    active = d.mark_active
+    if amount > 0
+      if backwards
+        remember(3,start,amount,cursor)
+        removed = indent_remove(start,amount)
+        d.cursor = cursor >= start + amount ? cursor - amount : start
+        if active and mark >= start
+          mark = mark >= start + amount ? mark - amount : start
+      else if amount <= d.capacity - d.length
+        remember(2,start,amount,cursor)
+        inserted = indent_insert(start,amount,false)
+        d.cursor = cursor + amount
+        if active and mark >= start
+          mark += amount
+      else
+        d.full = true
+        cells.parent.workspace.console().dirty = true
+      d.mark = mark
+      d.mark_active = active
+
+  // Ask the existing token scanner, so comments/literals never masquerade as
+  // a trailing '=' or ':'. This is an indentation hint, not a second parser.
+  line_extra @434 (start:i64,end:i64)->i64 =
+    window = LexBytes()
+    state = LexState()
+    position = start
+    token_start = start
+    base = start
+    limit = start
+    refill = true
+    first = true
+    block = false
+    trailing = false
+    while position < end
+      if state[0] == 0
+        token_start = position
+      if refill
+        base = position
+        limit = end - base > 4096 ? base + 4096 : end
+        for index in base..limit
+          window[index - base] = byte(index)
+        refill = false
+      status = compiler(window,position - base,limit - base,limit == end,state)
+      next = base + state[2]
+      if status == 0
+        if next <= base or next > limit or limit == end
+          block = false
+          trailing = false
+          position = end
+        else
+          position = next
+          refill = true
+      else if status < 0 or next <= token_start or next < position or next > limit
+        block = false
+        trailing = false
+        position = end
+      else
+        if status != 4 and status != 5
+          if first
+            word = 0
+            if next - token_start <= 5
+              for index in token_start..next
+                word = word | (byte(index) << ((index - token_start) * 8))
+            block = status == 1 and (word == 0x6669 or word == 0x65736c65 or word == 0x656c696877 or word == 0x726f66)
+            first = false
+          last = byte(token_start)
+          trailing = status == 1 and next - token_start == 1 and (last == 61 or last == 58 or last == 40 or last == 91)
+        position = next
+    block or trailing ? 2 : 0
+
+  indent_insert @435 (position:i64,amount:i64,newline:bool)->bool =
+    d = cells.document()
+    valid = position >= d.scope_start and position <= d.scope_end and amount > 0 and amount <= d.capacity - d.length
+    if valid
+      location = sys.offset(sys.addr(d.address),position)
+      sys.memory_copy(sys.offset(location,amount),location,d.length - position)
+      sys.memory_fill(location,32,amount)
+      if newline
+        sys.store8(location,10)
+        d.lines += 1
+        d.scope_lines += 1
+      d.length += amount
+      d.scope_end += amount
+      d.cursor = position + amount
+      changed()
+    valid
+
+  indent_remove @436 (position:i64,amount:i64)->bool =
+    d = cells.document()
+    valid = position >= d.scope_start and amount > 0 and amount <= d.scope_end - position
+    if valid
+      for index in position..position + amount
+        if byte(index) == 10
+          d.lines -= 1
+          d.scope_lines -= 1
+      location = sys.offset(sys.addr(d.address),position)
+      sys.memory_copy(location,sys.offset(location,amount),d.length - position - amount)
+      d.length -= amount
+      d.scope_end -= amount
+      sys.memory_fill(sys.offset(sys.addr(d.address),d.length),0,amount)
+      d.cursor = position
+      changed()
+    valid
+

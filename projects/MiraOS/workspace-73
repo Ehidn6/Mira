@@ -78,6 +78,8 @@ workspace @73 ()->unit =
     write(Text(":a hardware: PCI, physical memory and read-only controller capabilities.\n"))
     write(Text(":l cycles layouts. Super+1/2/3 selects workspace/editor/console.\n"))
     write(Text("Editor Ctrl+A/E line start/end; Ctrl+B/F char; Ctrl+P/N line; Alt+B/F word.\n"))
+    write(Text("Enter auto-indents; Tab/Shift+Tab indent line; Ctrl+J inserts a literal newline.\n"))
+    write(Text("source error opens the object and location of a current compile/check error.\n"))
     write(Text("Ctrl+V page down; Alt+V page up; Alt+Shift+, start; Alt+Shift+. end of document.\n"))
     write(Text("Hold navigation to repeat. Save, palette, cut/paste and global commands do not repeat.\n"))
     write(Text("Ctrl+K kill to EOL/newline; Alt+Backspace/D delete word; Ctrl+U digits repeat; Ctrl+G cancel.\n"))

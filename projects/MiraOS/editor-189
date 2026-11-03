@@ -89,15 +89,10 @@ editor @189 (value:i64)->unit =
     d.skip_lf = false
     editor.command(15)
   else if value == 10 or value == 13
-    insert(10)
+    newline()
   else if value == 9
     d.skip_lf = false
-    if d.length <= d.capacity - 2
-      insert(32)
-      insert(32)
-    else
-      d.full = true
-      cells.parent.workspace.console().dirty = true
+    indent(false)
   else if value >= 32 and value <= 126
     d.skip_lf = false
     insert(value)
@@ -331,6 +326,10 @@ editor @189 (value:i64)->unit =
       d.cursor = position
       if kind == 0
         erase.delete_raw(position)
+      else if kind == 2
+        removed = indent_remove(position,value)
+      else if kind == 3
+        inserted = indent_insert(position,value,false)
       else
         insert.insert_raw(value)
       d.cursor = cursor < d.scope_start ? d.scope_start : (cursor > d.scope_end ? d.scope_end : cursor)
@@ -451,8 +450,8 @@ editor @189 (value:i64)->unit =
       d.skip_lf = false
       d.redraw = true
       cells.parent.workspace.console().dirty = true
-      cells.parent.workspace.write(Text("SOURCE: Alt+X source open NAME/ID; source parent/project; Ctrl+X console\n"))
-      cells.parent.workspace.write(Text("Ctrl+S saves project with this edit; Ctrl+Z undo. ASCII; no live compilation.\n"))
+      cells.parent.workspace.write(Text("SOURCE: Alt+X source open NAME/ID; source parent/project; Ctrl+X workspace\n"))
+      cells.parent.workspace.write(Text("Ctrl+S saves; Ctrl+Z undo; Alt+X source run compiles and runs. ASCII editor.\n"))
     else
       cells.parent.workspace.write(Text("Source unchanged: this first editor supports ASCII source only.\n"))
 
